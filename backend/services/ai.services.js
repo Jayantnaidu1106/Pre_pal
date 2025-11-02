@@ -1,72 +1,60 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Initialize the API with your key
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    generationConfig: {
-        temperature: 0.2,
-        topP: 0.8,
-        topK: 40,
-        candidateCount: 1,
-        stopSequences: ["User:"]
-    },
-    systemInstruction: `You are an expert in MERN and Development . you have an experience of 10 years  in the development.
-      You always write code in modular and break the code in the possible way and the folww best practices, You use understandable
-       comments in the code, you crate files as needed, you write code in while mantaining the working of previous code.
-     You always follow the best practices of the debvelopment you never miss the edge cases and always qrite the code that is scalable and maintainable, In your code you use the latest features of the language and the framework you are using,
-     you always handle the errors and exceptions.
-     
-
-     Examples :
-
-     user : "Create an express server"
-     AI :{
-
-
-     "app.js": "
-
-        const express = require('express');
-        const app = express();
-        const port = 3000;
-        
-        app.get('/', (req, res) => {
-            res.send('Hello World!');
-        });
-        
-        app.listen(port, () => {
-            console.log(\`Example app listening on port \${port}\`);
-        });
-        "
-        ,
-
-        "package.json": "
-        
-        {
-            "name": "my-app",
-            "version": "1.0.0",
-            "description": "",
-            "main": "index.js",
-            "scripts": {
-              "start": "node app.js"
-            },
-            "author": "",
-            "license": "ISC",
-            "dependencies": {
-              "express": "^5.1.0"
-            }
-          }
-        "
-     }
-
-     
-     `
-});
-
 export const generateResult = async (prompt) => {
+    // Try multiple model names in order of preference (newest first)
+    const modelNames = [
+        'gemini-2.0-flash-exp',              // Latest experimental model
+        'gemini-1.5-flash',                  // Stable 1.5 flash model
+        'gemini-1.5-flash-latest',           // Latest 1.5 flash
+        'gemini-pro',                        // Fallback stable model
+    ];
+    
+    for (const modelName of modelNames) {
+        try {
+            console.log(`Trying AI model: ${modelName}...`);
+            
+            const model = genAI.getGenerativeModel({ model: modelName });
+            
+            const systemPrompt = `You are an expert in MERN stack development with 10 years of experience. 
+You write clean, modular code with best practices, proper error handling, and helpful comments.
+You provide concise, practical solutions.`;
 
+            const fullPrompt = `${systemPrompt}\n\nUser Question: ${prompt}\n\nYour Answer:`;
+            
+            console.log('Sending request to Gemini API...');
+            
+            // Generate content
+            const result = await model.generateContent(fullPrompt);
+            const response = result.response;
+            const text = response.text();
+            
+            console.log(`✅ SUCCESS with model: ${modelName}`);
+            return text;
+            
+        } catch (error) {
+            console.log(`❌ Failed with ${modelName}: ${error.message}`);
+            
+            // If this is the last model, return error
+            if (modelName === modelNames[modelNames.length - 1]) {
+                console.error('=== All AI Models Failed ===');
+                console.error('Error details:', error.message);
+                
+                return `❌ AI Service Unavailable
 
-    const result = await model.generateContent(prompt, { generationConfig: { temperature: 0.2, topP: 0.8, topK: 40, candidateCount: 1, stopSequences: ["User:"] } });
-    return result.response.text();
+The AI models are not accessible with the current API key. This could be because:
 
+1. The API key needs to be regenerated at: https://makersuite.google.com/app/apikey
+2. The Generative Language API needs to be enabled in Google Cloud Console
+3. Your API key might have expired or reached quota limits
+
+Error: ${error.message}
+
+Please update the GOOGLE_API_KEY in the .env file with a new key.`;
+            }
+            // Continue to next model
+        }
+    }
 }

@@ -22,6 +22,9 @@ const io = new Server(server,{
 // Track active users
 const activeUsers = new Map();
 
+// Track whiteboard state per project
+const whiteboardState = new Map();
+
 io.use(async (socket,next)=>{
     try{
         const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
@@ -90,15 +93,30 @@ io.on('connection', socket => {
         const aiIsPresentInMessage = message.includes('@ai');
 
         if(aiIsPresentInMessage){
-            const prompt = message.replace('@ai','');
-            const result  = await generateResult(prompt);
-           io.to(socket.roomId).emit('project-message', {
-                message: result,
-                sender: 'ai',
-                projectId: socket.project._id,
-                timestamp: new Date(),
-                user: { name: 'AI', email: 'ai@example.com' }
-            });
+            try {
+                const prompt = message.replace('@ai','').trim();
+                console.log('AI Request received. Prompt:', prompt);
+                
+                const result = await generateResult(prompt);
+                console.log('AI Response generated successfully');
+                
+                io.to(socket.roomId).emit('project-message', {
+                    message: result,
+                    sender: 'ai',
+                    projectId: socket.project._id,
+                    timestamp: new Date(),
+                    user: { name: 'AI', email: 'ai@example.com' }
+                });
+            } catch (error) {
+                console.error('AI Generation Error:', error.message);
+                io.to(socket.roomId).emit('project-message', {
+                    message: `Sorry, I encountered an error: ${error.message}. Please try again.`,
+                    sender: 'ai',
+                    projectId: socket.project._id,
+                    timestamp: new Date(),
+                    user: { name: 'AI', email: 'ai@example.com' }
+                });
+            }
         }
 
         if (!data || !data.message) return;
@@ -124,6 +142,61 @@ io.on('connection', socket => {
             connectedAt: user.connectedAt
         }));
         socket.emit('active-users', users);
+    });
+
+    // Whiteboard Events
+    socket.on('whiteboard:request-init', (data) => {
+        const projectId = data.projectId || socket.roomId;
+        const history = whiteboardState.get(projectId) || [];
+        console.log(`Sending whiteboard init to user. Project: ${projectId}, History items: ${history.length}`);
+        socket.emit('whiteboard:init', { history });
+    });
+
+    socket.on('whiteboard:draw', (data) => {
+        if (!data || !data.points) return;
+        
+        console.log(`Whiteboard draw from user ${data.userId}, points: ${data.points.length}`);
+        
+        // Store in whiteboard history
+        const projectId = data.projectId || socket.roomId;
+        const history = whiteboardState.get(projectId) || [];
+        history.push(data);
+        
+        // Limit history to last 1000 actions to prevent memory issues
+        if (history.length > 1000) {
+            history.shift();
+        }
+        
+        whiteboardState.set(projectId, history);
+        
+        // Broadcast to other users in the room
+        console.log(`Broadcasting draw to room ${socket.roomId}`);
+        socket.broadcast.to(socket.roomId).emit('whiteboard:draw', data);
+    });
+
+    socket.on('whiteboard:clear', (data) => {
+        const projectId = data.projectId || socket.roomId;
+        console.log(`Clearing whiteboard for project ${projectId}`);
+        whiteboardState.set(projectId, []);
+        socket.broadcast.to(socket.roomId).emit('whiteboard:clear', data);
+    });
+
+    socket.on('whiteboard:undo', (data) => {
+        const projectId = data.projectId || socket.roomId;
+        const history = whiteboardState.get(projectId) || [];
+        
+        if (history.length > 0) {
+            history.pop();
+            whiteboardState.set(projectId, history);
+            console.log(`Undo whiteboard action. Remaining: ${history.length}`);
+        }
+        
+        socket.broadcast.to(socket.roomId).emit('whiteboard:undo', data);
+    });
+
+    socket.on('whiteboard:cursor', (data) => {
+        // Broadcast cursor position to other users (don't store in history)
+        socket.broadcast.to(socket.roomId).emit('whiteboard:cursor', data);
     });
 });
 

@@ -6,6 +6,7 @@ import 'remixicon/fonts/remixicon.css';
 import { intializeSocket, recieveMessage, sendMessage } from '../config/socket';
 import { useUser } from '../context/user.context';
 import Markdown from 'markdown-to-jsx';
+import Whiteboard from '../components/Whiteboard';
 
 const Project = () => {
   const { id } = useParams();
@@ -22,18 +23,29 @@ const Project = () => {
   const [allUsers, setAllUsers] = useState([]);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const { user, setUser } = useUser();
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const socketInitialized = useRef(false);
 
   useEffect(() => {
-    // Initialize socket when project is available
-    if (project?._id) {
+    // Initialize socket when project is available (only once)
+    if (project?._id && !socketInitialized.current) {
       intializeSocket(project._id);
+      socketInitialized.current = true;
 
       // Set up message listener
       recieveMessage('project-message', (data) => {
-        setMessages(prev => [...prev, { ...data, isOwn: false, id: Date.now() }]);
+        console.log('Received message:', data);
+        // Add message if it's from another user OR from AI
+        if (data.sender !== user?._id || data.sender === 'ai') {
+          setMessages(prev => [...prev, { 
+            ...data, 
+            isOwn: data.sender === user?._id && data.sender !== 'ai', 
+            id: Date.now() + Math.random() 
+          }]);
+        }
       });
     }
-  }, [project]);
+  }, [project, user]);
 
   useEffect(() => {
     // Fetch all users for project management
@@ -96,14 +108,15 @@ const Project = () => {
       user: user
     };
 
-    sendMessage('project-message', messageData);
-
     // Add to local messages for immediate display
     setMessages(prev => [...prev, {
       ...messageData,
       isOwn: true,
-      id: Date.now()
+      id: Date.now() + Math.random()
     }]);
+
+    // Send to server (will be broadcasted to other users only)
+    sendMessage('project-message', messageData);
 
     setNewMessage('');
   };
@@ -152,7 +165,7 @@ const Project = () => {
     <div className="flex h-screen w-screen overflow-hidden relative font-sans">
 
       {/* 💬 Chat Section */}
-      <div className="w-full md:w-1/3 bg-[#f7f2f2] flex flex-col justify-between border-r border-gray-300">
+      <div className={`${showWhiteboard ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 bg-[#f7f2f2] flex-col justify-between border-r border-gray-300`}>
         {/* Top Bar */}
         <div className="bg-[#9e7676] p-4 flex justify-between items-center">
           <div className="flex items-center space-x-4">
@@ -172,95 +185,160 @@ const Project = () => {
             )}
           </div>
 
-          <button onClick={() => navigate('/')}>
-            <i className="ri-home-line text-black text-2xl cursor-pointer hover:text-white"></i>
-          </button>
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setShowWhiteboard(!showWhiteboard)}
+              className="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded hover:bg-opacity-30 transition"
+              title={showWhiteboard ? 'Hide Whiteboard' : 'Show Whiteboard'}
+            >
+              <i className={`${showWhiteboard ? 'ri-chat-3-line' : 'ri-pencil-ruler-2-line'} text-black text-xl`}></i>
+              <span className="text-white text-sm font-medium hidden md:inline">
+                {showWhiteboard ? 'Chat' : 'Whiteboard'}
+              </span>
+            </button>
+
+            <button onClick={() => navigate('/')}>
+              <i className="ri-home-line text-black text-2xl cursor-pointer hover:text-white"></i>
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
         <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex flex-col ${msg.isOwn ? 'items-end text-right' : 'items-start'}`}
-            >
-              <span className="text-xs text-gray-600">{msg.user.email}</span>
+          {messages.map((msg) => {
+            const isAI = msg.user?.email === 'ai@example.com';
+            return (
               <div
-                className={`px-3 py-2 rounded-lg max-w-[80%] text-sm shadow ${
-                  msg.isOwn ? 'bg-[#d1c4e9]' : 'bg-[#c8e6c9]'
-                }`}
+                key={msg.id}
+                className={`flex flex-col ${msg.isOwn ? 'items-end text-right' : 'items-start'}`}
               >
-                {/* Check if message is from AI and render as markdown */}
-                {msg.user.email === 'ai@example.com' ? (
-                  <Markdown
-                    options={{
-                      wrapper: 'div',
-                      forceWrapper: true,
-                      overrides: {
-                        p: {
-                          props: {
-                            style: { margin: '0.5em 0' }
-                          }
-                        },
-                        code: {
-                          props: {
-                            style: {
-                              backgroundColor: '#f4f4f4',
-                              padding: '2px 4px',
-                              borderRadius: '3px',
-                              fontSize: '0.9em'
+                <span className={`text-xs font-medium ${isAI ? 'text-blue-600' : 'text-gray-600'} flex items-center gap-1`}>
+                  {isAI && <i className="ri-robot-line"></i>}
+                  {msg.user?.email || 'Unknown'}
+                </span>
+                <div
+                  className={`px-4 py-3 rounded-lg max-w-[80%] text-sm shadow-md ${
+                    isAI 
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200' 
+                      : msg.isOwn 
+                        ? 'bg-[#d1c4e9]' 
+                        : 'bg-[#c8e6c9]'
+                  }`}
+                >
+                  {/* Check if message is from AI and render as markdown */}
+                  {isAI ? (
+                    <Markdown
+                      options={{
+                        wrapper: 'div',
+                        forceWrapper: true,
+                        overrides: {
+                          p: {
+                            props: {
+                              style: { margin: '0.5em 0', color: '#1e40af' }
                             }
-                          }
-                        },
-                        pre: {
-                          props: {
-                            style: {
-                              backgroundColor: '#f4f4f4',
-                              padding: '10px',
-                              borderRadius: '5px',
-                              overflow: 'auto',
-                              fontSize: '0.9em'
+                          },
+                          code: {
+                            props: {
+                              style: {
+                                backgroundColor: '#dbeafe',
+                                color: '#1e3a8a',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.9em',
+                                fontFamily: 'monospace'
+                              }
+                            }
+                          },
+                          pre: {
+                            props: {
+                              style: {
+                                backgroundColor: '#1e293b',
+                                color: '#e2e8f0',
+                                padding: '12px',
+                                borderRadius: '6px',
+                                overflow: 'auto',
+                                fontSize: '0.85em',
+                                fontFamily: 'monospace'
+                              }
+                            }
+                          },
+                          h1: {
+                            props: {
+                              style: { fontSize: '1.2em', fontWeight: 'bold', margin: '0.5em 0', color: '#1e40af' }
+                            }
+                          },
+                          h2: {
+                            props: {
+                              style: { fontSize: '1.1em', fontWeight: 'bold', margin: '0.4em 0', color: '#1e40af' }
+                            }
+                          },
+                          h3: {
+                            props: {
+                              style: { fontSize: '1em', fontWeight: 'bold', margin: '0.3em 0', color: '#1e40af' }
                             }
                           }
                         }
-                      }
-                    }}
-                  >
-                    {msg.message}
-                  </Markdown>
-                ) : (
-                  msg.message
-                )}
-                <div className="text-[10px] text-gray-500 mt-1">{formatTime(msg.timestamp)}</div>
+                      }}
+                    >
+                      {msg.message}
+                    </Markdown>
+                  ) : (
+                    msg.message
+                  )}
+                  <div className="text-[10px] text-gray-500 mt-1">{formatTime(msg.timestamp)}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef}></div>
         </div>
 
         {/* Input */}
-        <div className="bg-[#d1d1d1] p-4 flex items-center border-t">
-          <input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSendMessage();
-            }}
-            type="text"
-            placeholder="Type your message..."
-            className="flex-1 p-2 rounded-md border border-gray-400 bg-white focus:outline-none"
-          />
-          <button
-            onClick={handleSendMessage}
-            className="ml-2 px-4 py-2 bg-[#9e7676] text-white rounded-md hover:bg-[#825f5f]"
-          >
-            Send
-          </button>
+        <div className="bg-[#d1d1d1] p-4 border-t">
+          <div className="flex items-center gap-2">
+            <input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSendMessage();
+              }}
+              type="text"
+              placeholder="Type your message... (Use @ai for AI help)"
+              className="flex-1 p-2 rounded-md border border-gray-400 bg-white focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={handleSendMessage}
+              className="px-4 py-2 bg-[#9e7676] text-white rounded-md hover:bg-[#825f5f] transition-colors"
+            >
+              Send
+            </button>
+          </div>
+          {newMessage.includes('@ai') && (
+            <div className="mt-2 text-xs text-blue-600 flex items-center gap-1">
+              <i className="ri-robot-line"></i>
+              <span>AI will respond to your message</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Placeholder Panel */}
-      <div className="hidden md:flex flex-1 bg-[#e4e5e7]"></div>
+      {/* Whiteboard or Placeholder Panel */}
+      <div className={`${showWhiteboard ? 'flex' : 'hidden md:flex'} flex-1 bg-[#e4e5e7]`}>
+        {showWhiteboard && project ? (
+          <Whiteboard 
+            projectId={project._id} 
+            isVisible={showWhiteboard}
+            onClose={() => setShowWhiteboard(false)}
+          />
+        ) : (
+          <div className="flex items-center justify-center w-full h-full">
+            <div className="text-center">
+              <i className="ri-pencil-ruler-2-line text-6xl text-gray-400 mb-4"></i>
+              <p className="text-gray-500 text-lg">Click "Whiteboard" to start collaborating</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 👥 Multi-User Selection Modal */}
       <AnimatePresence>
