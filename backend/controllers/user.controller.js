@@ -8,12 +8,14 @@ export const createUserController = async (req, res) => {
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
+        console.log('Registration validation errors:', errors.array());
         return res.status(400).json({
             errors: errors.array()
         })
     }
 
     try {
+        console.log('Creating new user:', req.body.email);
         const user = await userService.createUser(req.body);
 
         const token = await user.generateJWT();
@@ -23,7 +25,10 @@ export const createUserController = async (req, res) => {
             await redis.set(token, JSON.stringify(user), 'EX', 60*60*24);
         } catch (redisError) {
             // Continue without Redis caching
+            console.log('Redis cache skipped (not connected)');
         }
+
+        console.log('User registered successfully:', req.body.email);
 
         res.status(201).json({
             user, token
@@ -31,6 +36,7 @@ export const createUserController = async (req, res) => {
     }
 
     catch (error) {
+        console.error('Registration error:', error.message);
         res.status(500).json({
             error: error.message
         })
@@ -41,6 +47,7 @@ export const loginController = async (req, res) => {
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
+        console.log('Login validation errors:', errors.array());
         return res.status(400).json({
             errors: errors.array()
         })
@@ -48,18 +55,28 @@ export const loginController = async (req, res) => {
 
     try {
 
-        const { email } = req.body;
+        const { email, password } = req.body;
+        console.log('Login attempt for email:', email);
+
+        if (!password) {
+            return res.status(400).json({
+                error: 'Password is required'
+            })
+        }
+
         const user = await userModel.findOne({ email }).select('+password')
 
         if (!user) {
+            console.log('User not found:', email);
             return res.status(400).json({
                 error: 'Invalid email or password'
             })
         }
 
-        const isMatch = await user.isValidPassword(req.body.password);
+        const isMatch = await user.isValidPassword(password);
 
         if (!isMatch) {
+            console.log('Password mismatch for user:', email);
             return res.status(400).json({
                 error: 'Invalid email or password'
             })
@@ -72,7 +89,10 @@ export const loginController = async (req, res) => {
             await redis.set(token, JSON.stringify(user), 'EX', 60*60*24);
         } catch (redisError) {
             // Continue without Redis caching
+            console.log('Redis cache skipped (not connected)');
         }
+
+        console.log('Login successful for user:', email);
 
         res.status(200).json({
             user, token
@@ -81,6 +101,7 @@ export const loginController = async (req, res) => {
 
     }
     catch (err) {
+        console.error('Login error:', err.message);
         res.status(500).json({
             error: err.message
         })
