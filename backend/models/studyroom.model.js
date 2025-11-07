@@ -1,6 +1,6 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose from 'mongoose';
 
-const projectSchema = new mongoose.Schema({
+const studyRoomSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
@@ -21,9 +21,15 @@ const projectSchema = new mongoose.Schema({
         ref: 'user',
         required: true
     },
-    users: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'user'
+    participants: [{
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'user'
+        },
+        joinedAt: {
+            type: Date,
+            default: Date.now
+        }
     }],
     files: [{
         filename: String,
@@ -49,16 +55,15 @@ const projectSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         },
-        reason: String
+        removedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'user'
+        }
     }],
     warningCount: {
         type: Map,
         of: Number,
-        default: new Map()
-    },
-    whiteboardState: {
-        type: String,
-        default: ''
+        default: {}
     },
     createdAt: {
         type: Date,
@@ -67,25 +72,25 @@ const projectSchema = new mongoose.Schema({
 });
 
 // Generate a random 6-digit code
-projectSchema.statics.generateRoomCode = function() {
+studyRoomSchema.statics.generateRoomCode = function() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 // Check if a user is the owner
-projectSchema.methods.isOwner = function(userId) {
+studyRoomSchema.methods.isOwner = function(userId) {
     return this.owner.toString() === userId.toString();
 };
 
 // Check if a user is a participant
-projectSchema.methods.isParticipant = function(userId) {
-    return this.users.some(u => u.toString() === userId.toString());
+studyRoomSchema.methods.isParticipant = function(userId) {
+    return this.participants.some(p => p.user.toString() === userId.toString());
 };
 
 // Check if a user is removed
-projectSchema.methods.isRemoved = function(userId) {
+studyRoomSchema.methods.isRemoved = function(userId) {
     return this.removedUsers.some(r => r.user.toString() === userId.toString());
 };
 
-const Project = mongoose.model('project', projectSchema);
+const StudyRoom = mongoose.model('studyroom', studyRoomSchema);
 
-export default Project;
+export default StudyRoom;

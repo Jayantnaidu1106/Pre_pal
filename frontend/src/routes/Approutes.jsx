@@ -5,6 +5,7 @@ import Register from '../screens/Register';
 import Project from '../screens/Project';
 import SocketTest from '../screens/SocketTest';
 import UserAuth from '../auth/userAuth';
+
 const AppRoutes = () => {
   return (
     <Router>
