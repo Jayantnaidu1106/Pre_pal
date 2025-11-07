@@ -41,7 +41,6 @@ io.use(async (socket,next)=>{
         }
         socket.user = decoded;
 
-        // Checkpoint: Validate project if provided
         if(projectId){
             if(!mongoose.Types.ObjectId.isValid(projectId)){
                 return next(new Error('Invalid project ID format'));
@@ -52,7 +51,7 @@ io.use(async (socket,next)=>{
                 return next(new Error('Project not found'));
             }
         } else {
-            // Allow connection without project for testing
+
             socket.project = { _id: 'no-project', name: 'No Project' };
         }
 
