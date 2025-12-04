@@ -2,33 +2,34 @@ import socket from 'socket.io-client';
 
 let socketInstance = null;
 
-export const intializeSocket = (projectid) => {
-    // Checkpoint: Return existing socket if available
+export const intializeSocket = (projectId) => {
+    // Checkpoint: Disconnect existing socket if switching rooms
     if (socketInstance) {
-        return socketInstance;
+        socketInstance.disconnect();
+        socketInstance = null;
     }
 
     // Checkpoint: Create new socket connection
     socketInstance = socket('http://localhost:3000', {
         auth: {
             token: localStorage.getItem('token'),
-            projectId: projectid
+            projectId: projectId
         },
         query: {
-            projectId: projectid
+            projectId: projectId
         },
         extraHeaders: {
-            projectid: projectid
+            projectid: projectId
         }
     });
 
     // Checkpoint: Handle connection events
     socketInstance.on('connect', () => {
-        // Connection established successfully
+        console.log('Socket connected:', socketInstance.id);
     });
 
     socketInstance.on('disconnect', () => {
-        // Connection lost
+        console.log('Socket disconnected');
     });
 
     socketInstance.on('connect_error', (error) => {
@@ -49,18 +50,31 @@ export const intializeSocket = (projectid) => {
 
 export const recieveMessage = (eventname, callback) => {
     // Checkpoint: Validate socket instance
+    console.log('[SOCKET LISTENER SETUP]', eventname);
     if (!socketInstance) {
+        console.error('[SOCKET ERROR] Socket not initialized for receiving');
         return;
     }
-    socketInstance.on(eventname, callback);
+    
+    // Remove existing listener for this event to prevent duplicates
+    socketInstance.off(eventname);
+    
+    // Add new listener
+    socketInstance.on(eventname, (data) => {
+        console.log('[SOCKET RECEIVE]', eventname, 'Data:', data);
+        callback(data);
+    });
 };
 
 export const sendMessage = (eventname, data) => {
     // Checkpoint: Validate socket instance
+    console.log('[SOCKET SEND]', eventname, 'Data:', data);
     if (!socketInstance) {
+        console.error('[SOCKET ERROR] Socket not initialized');
         return;
     }
     socketInstance.emit(eventname, data);
+    console.log('[SOCKET SEND COMPLETE]', eventname);
 };
 
 // Check if a specific user is connected
