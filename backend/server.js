@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import projectModel from './models/project.model.js';
+import StudyRoom from './models/studyroom.model.js';
 import Message from './models/message.model.js';
 import { generateResult } from './services/ai.services.js';
 import { containsInappropriateContent, processWarning } from './services/moderation.service.js';
@@ -43,19 +44,27 @@ io.use(async (socket,next)=>{
         }
         socket.user = decoded;
 
-        // Checkpoint: Validate project if provided
+        // Checkpoint: Validate project/studyroom if provided
         if(projectId){
             if(!mongoose.Types.ObjectId.isValid(projectId)){
                 return next(new Error('Invalid project ID format'));
             }
 
-            socket.project = await projectModel.findById(projectId);
-            if(!socket.project){
-                return next(new Error('Project not found'));
+            // Try to find as project first (backward compatibility)
+            let project = await projectModel.findById(projectId);
+            
+            if(project){
+                socket.project = project;
+                socket.roomType = 'project';
+            } else {
+                // If not found as project, treat as study room
+                socket.project = { _id: projectId };
+                socket.roomType = 'studyroom';
             }
         } else {
             // Allow connection without project for testing
             socket.project = { _id: 'no-project', name: 'No Project' };
+            socket.roomType = 'testing';
         }
 
         next();
@@ -67,17 +76,21 @@ io.use(async (socket,next)=>{
 
 io.on('connection', (socket) => {
 
-    console.log('A User Connected');
+    console.log('A User Connected:', socket.user.email || socket.user.userId);
 
     socket.roomId = socket.project._id.toString();
 
-    activeUsers.set(socket.user.userId, {
+    // Use consistent user ID (handle both _id and userId from token)
+    const userId = socket.user._id || socket.user.userId || socket.user.id;
+    
+    activeUsers.set(userId, {
         socketId: socket.id,
         userInfo: socket.user,
         projectId: socket.project._id
     });
 
     socket.join(socket.roomId);
+    console.log(`User ${userId} joined room ${socket.roomId}`);
 
     socket.on('project-message', async (data)=>{
 
@@ -240,8 +253,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('A User Disconnected');
-        activeUsers.delete(socket.user.userId);
+        const userId = socket.user._id || socket.user.userId || socket.user.id;
+        console.log('A User Disconnected:', userId);
+        activeUsers.delete(userId);
     });
 
 

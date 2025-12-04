@@ -14,6 +14,7 @@ const StudyRoom = () => {
   const [studyRoom, setStudyRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isJoining, setIsJoining] = useState(false); // Prevent multiple join attempts
   
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -26,6 +27,8 @@ const StudyRoom = () => {
   const [showParticipants, setShowParticipants] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null); // For message context menu
+  const [fileDeleteMenu, setFileDeleteMenu] = useState(null); // For file delete dropdown
 
   const { user } = useUser();
 
@@ -46,22 +49,26 @@ const StudyRoom = () => {
     // Initialize socket with study room ID
     intializeSocket(studyRoom._id, true); // true indicates it's a study room
 
+    // Fetch existing messages
+    fetchMessages();
+
     // Set up message listener - receive ALL messages including own
     recieveMessage('project-message', (data) => {
       console.log('Received message:', data);
       // Check if message is from current user
       const isOwnMessage = data.sender === user._id || data.user?._id === user._id;
       setMessages(prev => {
-        // Check if message already exists (by timestamp + sender)
+        // Check if message already exists by _id or by timestamp+sender
         const exists = prev.some(msg => 
-          msg.timestamp === data.timestamp && 
-          (msg.sender === data.sender || msg.user?._id === data.user?._id)
+          (msg._id && msg._id === data._id) ||
+          (msg.timestamp === data.timestamp && 
+           (msg.sender === data.sender || msg.user?._id === data.user?._id))
         );
         if (exists) {
           console.log('Message already exists, skipping');
           return prev;
         }
-        return [...prev, { ...data, isOwn: isOwnMessage, id: Date.now() }];
+        return [...prev, { ...data, isOwn: isOwnMessage }];
       });
     });
 
@@ -102,18 +109,29 @@ const StudyRoom = () => {
         }
       });
 
-      // Listen for file events
-      recieveMessage('file-uploaded', () => {
-        fetchFiles();
-      });
-
-      recieveMessage('file-deleted', () => {
-        fetchFiles();
-      });
-
+    // Listen for file events
+    recieveMessage('file-uploaded', () => {
       fetchFiles();
-    
-    // Cleanup function - disconnect socket when component unmounts or room changes
+    });
+
+    recieveMessage('file-deleted', () => {
+      fetchFiles();
+    });
+
+    // Listen for message deletion events
+    recieveMessage('message-deleted-for-me', (data) => {
+      setMessages(prev => prev.filter(msg => msg._id !== data.messageId));
+    });
+
+    recieveMessage('message-deleted-for-everyone', (data) => {
+      setMessages(prev => prev.filter(msg => msg._id !== data.messageId));
+    });
+
+    recieveMessage('all-chat-cleared-for-me', () => {
+      setMessages([]);
+    });
+
+    fetchFiles();    // Cleanup function - disconnect socket when component unmounts or room changes
     return () => {
       console.log('Cleaning up socket connection');
       // Socket will be disconnected when intializeSocket is called again with new room
@@ -129,13 +147,16 @@ const StudyRoom = () => {
       setLoading(true);
       
       // Only try to join on initial load, not on every refresh
-      if (shouldJoin) {
+      if (shouldJoin && !isJoining) {
+        setIsJoining(true); // Prevent concurrent join attempts
         try {
           await api.post(`/studyroom/join/${id}`);
           console.log('Successfully joined study room');
         } catch (joinErr) {
           // If join fails, we'll still try to fetch the room details
           console.log('Join attempt:', joinErr.response?.data?.message || joinErr.message);
+        } finally {
+          // Keep isJoining true to prevent re-joining during this session
         }
       }
       
@@ -155,10 +176,33 @@ const StudyRoom = () => {
 
   const fetchFiles = async () => {
     try {
-      const response = await api.get(`/files/list/${id}`);
-      setFiles(response.data.files || []);
+      const response = await api.get(`/files/studyroom/list/${id}`);
+      const allFiles = response.data.files || [];
+      // Filter out files deleted by current user or deleted for everyone
+      const visibleFiles = allFiles.filter(file => 
+        !file.deletedForEveryone && 
+        !file.deletedBy?.some(id => id === user._id || id === user._id.toString())
+      );
+      setFiles(visibleFiles);
     } catch (err) {
-      console.error('Failed to fetch files:', err);
+      console.error('Error fetching files:', err);
+    }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const response = await api.get(`/messages/${id}`);
+      const msgs = response.data.messages || [];
+      // Normalize message structure - ensure user field exists
+      const messagesWithOwn = msgs.map(msg => ({
+        ...msg,
+        user: msg.user || msg.sender, // Use user if exists, otherwise sender
+        isOwn: msg.sender?._id === user._id || msg.sender === user._id
+      }));
+      setMessages(messagesWithOwn);
+    } catch (err) {
+      console.error('Failed to fetch messages:', err);
+      // Don't show error to user, just log it
     }
   };
 
@@ -195,7 +239,7 @@ const StudyRoom = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      await api.post(`/files/upload/${id}`, formData, {
+      await api.post(`/files/studyroom/upload/${id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -214,9 +258,9 @@ const StudyRoom = () => {
     }
   };
 
-  const handleDownloadFile = async (filename, originalName) => {
+  const handleFileDownload = async (filename, originalName) => {
     try {
-      const response = await api.get(`/files/download/${id}/${filename}`, {
+      const response = await api.get(`/files/studyroom/download/${id}/${filename}`, {
         responseType: 'blob'
       });
 
@@ -232,13 +276,16 @@ const StudyRoom = () => {
     }
   };
 
-  const handleDeleteFile = async (filename) => {
-    if (!confirm('Are you sure you want to delete this file?')) return;
-
+  const handleDeleteFile = async (filename, deleteForEveryone = false) => {
     try {
-      await api.delete(`/files/delete/${id}/${filename}`);
-      sendMessage('file-deleted', { filename });
+      await api.post(`/files/studyroom/delete/${id}/${filename}`, {
+        deleteForEveryone
+      });
+      if (deleteForEveryone) {
+        sendMessage('file-deleted', { filename });
+      }
       fetchFiles();
+      alert(deleteForEveryone ? 'File deleted for everyone!' : 'File hidden for you!');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to delete file');
     }
@@ -284,6 +331,48 @@ const StudyRoom = () => {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleMessageRightClick = (e, msg) => {
+    e.preventDefault();
+    if (msg.user?.email === 'ai@example.com') return; // Can't delete AI messages
+    
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      message: msg
+    });
+  };
+
+  const handleDeleteForMe = () => {
+    if (!contextMenu) return;
+    
+    sendMessage('delete-message-for-me', {
+      messageId: contextMenu.message._id
+    });
+    
+    // Remove from local state immediately
+    setMessages(prev => prev.filter(msg => msg._id !== contextMenu.message._id));
+    setContextMenu(null);
+  };
+
+  const handleDeleteForEveryone = () => {
+    if (!contextMenu) return;
+    
+    sendMessage('delete-message-for-everyone', {
+      messageId: contextMenu.message._id
+    });
+    
+    // Remove from local state immediately
+    setMessages(prev => prev.filter(msg => msg._id !== contextMenu.message._id));
+    setContextMenu(null);
+  };
+
+  const handleClearAllChat = () => {
+    if (window.confirm('Clear all messages for you? (Others will still see them)')) {
+      sendMessage('clear-all-chat-for-me', {});
+      setMessages([]);
+    }
   };
 
   const formatTime = (timestamp) => {
@@ -367,6 +456,14 @@ const StudyRoom = () => {
               <i className={`${showWhiteboard ? 'ri-chat-3-line' : 'ri-pencil-ruler-2-line'}`}></i>
               {showWhiteboard ? 'Chat' : 'Whiteboard'}
             </button>
+            <button
+              onClick={handleClearAllChat}
+              className="flex items-center gap-1 bg-orange-500 bg-opacity-80 px-3 py-1 rounded text-white text-sm hover:bg-opacity-100"
+              title="Clear all messages for me"
+            >
+              <i className="ri-delete-bin-line"></i>
+              Clear Chat
+            </button>
             {isOwner && (
               <button
                 onClick={handleDeleteRoom}
@@ -389,17 +486,20 @@ const StudyRoom = () => {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50">
+        <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50" onClick={() => setContextMenu(null)}>
           {messages.map((msg) => {
             const isAI = msg.user?.email === 'ai@example.com';
             return (
               <div
-                key={msg.id}
+                key={msg._id || msg.id}
                 className={`flex flex-col ${msg.isOwn ? 'items-end text-right' : 'items-start'}`}
+                onContextMenu={(e) => handleMessageRightClick(e, msg)}
               >
-                <span className={`text-xs font-medium ${isAI ? 'text-blue-600' : 'text-gray-600'} flex items-center gap-1`}>
+                <span className={`text-xs font-medium ${
+                  isAI ? 'text-blue-600' : 'text-gray-600'
+                } flex items-center gap-1`}>
                   {isAI && <i className="ri-robot-line"></i>}
-                  {msg.user?.email || 'Unknown'}
+                  {msg.user?.name || msg.user?.email || msg.sender?.name || msg.sender?.email || 'Unknown'}
                 </span>
                 <div
                   className={`px-4 py-3 rounded-lg max-w-[80%] text-sm shadow-sm ${
@@ -445,6 +545,32 @@ const StudyRoom = () => {
           })}
           <div ref={messagesEndRef}></div>
         </div>
+
+        {/* Context Menu for Message Actions */}
+        {contextMenu && (
+          <div
+            className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={handleDeleteForMe}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+            >
+              <i className="ri-delete-bin-6-line text-gray-600"></i>
+              Delete for me
+            </button>
+            {contextMenu.message.isOwn && (
+              <button
+                onClick={handleDeleteForEveryone}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"
+              >
+                <i className="ri-delete-bin-line"></i>
+                Delete for everyone
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Input */}
         <div className="bg-white p-4 border-t">
@@ -567,18 +693,25 @@ const StudyRoom = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
+            onClick={() => {
+              setShowFiles(false);
+              setFileDeleteMenu(null);
+            }}
           >
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
-              <div className="flex justify-between items-center p-4 border-b bg-indigo-600 text-white">
+            <div 
+              className="bg-white rounded-lg max-w-4xl w-full h-[90vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center p-4 border-b bg-indigo-600 text-white flex-shrink-0">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <i className="ri-folder-line"></i>
                   Shared Files ({files.length})
                 </h2>
-                <button onClick={() => setShowFiles(false)}>
+                <button onClick={() => setShowFiles(false)} className="hover:bg-indigo-700 rounded p-1">
                   <i className="ri-close-line text-2xl"></i>
                 </button>
               </div>
-              <div className="overflow-y-auto max-h-96">
+              <div className="overflow-y-auto flex-1">
                 {files.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
                     <i className="ri-inbox-line text-6xl mb-4"></i>
@@ -586,31 +719,67 @@ const StudyRoom = () => {
                   </div>
                 ) : (
                   files.map((file) => (
-                    <div key={file.filename} className="flex items-center justify-between p-4 border-b hover:bg-gray-50">
-                      <div className="flex-1">
-                        <p className="font-medium flex items-center gap-2">
-                          <i className="ri-file-line text-indigo-600"></i>
-                          {file.originalName}
+                    <div key={file.filename} className="flex items-center gap-2 px-3 py-2 border-b hover:bg-gray-50">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium flex items-center gap-2 truncate text-sm">
+                          <i className="ri-file-line text-indigo-600 flex-shrink-0 text-base"></i>
+                          <span className="truncate">{file.originalName}</span>
                         </p>
                         <p className="text-xs text-gray-500">
-                          {formatFileSize(file.size)} • Uploaded by {file.uploadedBy?.email} • {new Date(file.uploadedAt).toLocaleDateString()}
+                          {formatFileSize(file.size)} • {file.uploadedBy?.email?.split('@')[0]}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5 flex-shrink-0">
                         <button
                           onClick={() => handleDownloadFile(file.filename, file.originalName)}
-                          className="px-3 py-1 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600"
+                          className="px-2.5 py-1.5 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 transition"
+                          title="Download"
                         >
                           <i className="ri-download-line"></i>
                         </button>
-                        {(isOwner || file.uploadedBy._id === user._id) && (
-                          <button
-                            onClick={() => handleDeleteFile(file.filename)}
-                            className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFileDeleteMenu(fileDeleteMenu === file.filename ? null : file.filename);
+                            }}
+                            className="px-2 py-1.5 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition flex items-center gap-0.5"
+                            title="Delete options"
                           >
                             <i className="ri-delete-bin-line"></i>
+                            <i className="ri-arrow-down-s-line text-xs"></i>
                           </button>
-                        )}
+                          {fileDeleteMenu === file.filename && (
+                            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-xl z-[60] w-[160px] overflow-hidden">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteFile(file.filename, false);
+                                  setFileDeleteMenu(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-1.5 transition"
+                              >
+                                <i className="ri-eye-off-line text-gray-600 text-sm"></i>
+                                <span>Delete for me</span>
+                              </button>
+                              {(isOwner || file.uploadedBy._id === user._id) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm('Delete this file for everyone?')) {
+                                      handleDeleteFile(file.filename, true);
+                                    }
+                                    setFileDeleteMenu(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-red-50 flex items-center gap-1.5 text-red-600 border-t transition"
+                                >
+                                  <i className="ri-delete-bin-line text-sm"></i>
+                                  <span>Delete for everyone</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))

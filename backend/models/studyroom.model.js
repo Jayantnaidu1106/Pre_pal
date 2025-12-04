@@ -24,7 +24,8 @@ const studyRoomSchema = new mongoose.Schema({
     participants: [{
         user: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'user'
+            ref: 'user',
+            required: true
         },
         joinedAt: {
             type: Date,
@@ -44,7 +45,15 @@ const studyRoomSchema = new mongoose.Schema({
         },
         size: Number,
         mimetype: String,
-        path: String
+        path: String,
+        deletedBy: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'user'
+        }],
+        deletedForEveryone: {
+            type: Boolean,
+            default: false
+        }
     }],
     removedUsers: [{
         user: {
@@ -90,6 +99,26 @@ studyRoomSchema.methods.isParticipant = function(userId) {
 studyRoomSchema.methods.isRemoved = function(userId) {
     return this.removedUsers.some(r => r.user.toString() === userId.toString());
 };
+
+// Pre-save hook to prevent duplicate participants
+studyRoomSchema.pre('save', function(next) {
+    if (this.isModified('participants')) {
+        // Remove duplicates based on user ID
+        const uniqueParticipants = [];
+        const seenUsers = new Set();
+        
+        for (const participant of this.participants) {
+            const userId = participant.user.toString();
+            if (!seenUsers.has(userId)) {
+                seenUsers.add(userId);
+                uniqueParticipants.push(participant);
+            }
+        }
+        
+        this.participants = uniqueParticipants;
+    }
+    next();
+});
 
 const StudyRoom = mongoose.model('studyroom', studyRoomSchema);
 
