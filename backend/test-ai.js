@@ -16,7 +16,8 @@ async function testAI() {
         'gemini-1.5-flash',
         'models/gemini-pro',
         'models/gemini-1.5-pro',
-        'models/gemini-1.5-flash'
+        'models/gemini-1.5-flash',
+        'gemini-2.5-pro'
     ];
     
     for (const modelName of modelNames) {
