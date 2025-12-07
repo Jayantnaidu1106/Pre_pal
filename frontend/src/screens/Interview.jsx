@@ -33,14 +33,26 @@ const Interview = () => {
             </p>
           </div>
 
-          {/* Coming Soon Banner */}
+          {/* Live CTA for mock interviews */}
           <div className="bg-gradient-to-r from-orange-100 to-red-100 border-2 border-orange-500 rounded-lg p-8 mb-8">
-            <h3 className="text-2xl font-bold text-orange-800 mb-4">
-              🚧 Coming Soon! 🚧
-            </h3>
-            <p className="text-orange-700 text-lg mb-4">
-              This module is currently under development. Soon you'll be able to:
+            <h3 className="text-2xl font-bold text-orange-800 mb-3">Mock Interviews are live</h3>
+            <p className="text-orange-700 text-lg mb-6">
+              Create an interview from your resume or a job description, practice with the AI avatar, and get instant feedback.
             </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <button
+                onClick={() => navigate('/mock-interview/new')}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-md font-semibold shadow"
+              >
+                Start New Mock Interview
+              </button>
+              <button
+                onClick={() => navigate('/mock-interview')}
+                className="bg-white border border-orange-500 text-orange-700 hover:bg-orange-50 px-6 py-3 rounded-md font-semibold"
+              >
+                View My Interviews
+              </button>
+            </div>
           </div>
 
           {/* Features Grid */}
@@ -78,71 +90,48 @@ const Interview = () => {
             </div>
           </div>
 
-          {/* Mock Difficulty Selector (Disabled) */}
-          <div className="border-2 border-gray-300 rounded-lg p-8 bg-gray-50 opacity-50 mb-8">
-            <h3 className="text-xl font-bold text-gray-700 mb-4">Select Difficulty Level</h3>
-            <div className="flex justify-center gap-4 mb-6">
+          {/* Quick links to the live flow */}
+          <div className="border-2 border-gray-200 rounded-lg p-8 bg-white mb-8">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Jump into a session</h3>
+            <div className="flex flex-col sm:flex-row justify-center gap-4">
               <button
-                disabled
-                className="px-8 py-3 border-2 border-green-300 rounded-lg bg-white cursor-not-allowed"
+                onClick={() => navigate('/mock-interview/new')}
+                className="px-8 py-3 rounded-lg bg-orange-600 text-white font-semibold shadow hover:bg-orange-700"
               >
-                <i className="ri-seedling-line text-2xl text-green-600"></i>
-                <div className="font-bold">Easy</div>
+                Create & Generate Questions
               </button>
               <button
-                disabled
-                className="px-8 py-3 border-2 border-orange-300 rounded-lg bg-white cursor-not-allowed"
+                onClick={() => navigate('/mock-interview')}
+                className="px-8 py-3 rounded-lg bg-gray-100 text-gray-800 font-semibold border border-orange-200 hover:bg-orange-50"
               >
-                <i className="ri-fire-line text-2xl text-orange-600"></i>
-                <div className="font-bold">Medium</div>
-              </button>
-              <button
-                disabled
-                className="px-8 py-3 border-2 border-red-300 rounded-lg bg-white cursor-not-allowed"
-              >
-                <i className="ri-sword-line text-2xl text-red-600"></i>
-                <div className="font-bold">Hard</div>
+                Go to Dashboard
               </button>
             </div>
-            <button 
-              disabled
-              className="bg-gray-400 text-white px-8 py-4 rounded-lg cursor-not-allowed text-lg font-bold"
-            >
-              Start Interview (Coming Soon)
-            </button>
+            <p className="text-sm text-gray-600 mt-4 text-center">
+              Uses the AI avatar session and feedback flow now available in Mock Interviews.
+            </p>
           </div>
 
           {/* Interview Types */}
           <div className="text-left mb-8">
-            <h4 className="font-bold text-gray-900 mb-4 text-center">Planned Interview Categories:</h4>
+            <h4 className="font-bold text-gray-900 mb-4 text-center">What’s included now</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-orange-50 p-4 rounded-lg text-center">
                 <i className="ri-code-line text-3xl text-orange-600 mb-2"></i>
-                <div className="font-semibold">Technical</div>
+                <div className="font-semibold">AI Avatar Session</div>
               </div>
               <div className="bg-orange-50 p-4 rounded-lg text-center">
-                <i className="ri-user-heart-line text-3xl text-orange-600 mb-2"></i>
-                <div className="font-semibold">HR</div>
+                <i className="ri-feedback-line text-3xl text-orange-600 mb-2"></i>
+                <div className="font-semibold">Auto Feedback</div>
               </div>
               <div className="bg-orange-50 p-4 rounded-lg text-center">
-                <i className="ri-team-line text-3xl text-orange-600 mb-2"></i>
-                <div className="font-semibold">Behavioral</div>
+                <i className="ri-history-line text-3xl text-orange-600 mb-2"></i>
+                <div className="font-semibold">Interview History</div>
               </div>
               <div className="bg-orange-50 p-4 rounded-lg text-center">
-                <i className="ri-briefcase-line text-3xl text-orange-600 mb-2"></i>
-                <div className="font-semibold">Case Study</div>
+                <i className="ri-question-answer-line text-3xl text-orange-600 mb-2"></i>
+                <div className="font-semibold">Generated Questions</div>
               </div>
-            </div>
-          </div>
-
-          {/* Tech Stack Info */}
-          <div className="mt-8 p-6 bg-orange-50 rounded-lg">
-            <h4 className="font-bold text-gray-900 mb-3">Planned Technology Stack:</h4>
-            <div className="flex flex-wrap justify-center gap-4 text-sm">
-              <span className="bg-white px-4 py-2 rounded-full border border-orange-300">OpenAI GPT-4</span>
-              <span className="bg-white px-4 py-2 rounded-full border border-orange-300">Speech Recognition</span>
-              <span className="bg-white px-4 py-2 rounded-full border border-orange-300">NLP Analysis</span>
-              <span className="bg-white px-4 py-2 rounded-full border border-orange-300">Performance Scoring</span>
             </div>
           </div>
         </div>

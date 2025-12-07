@@ -109,6 +109,8 @@ export const joinStudyRoom = async (req, res) => {
         const userId = getUserId(req);
         const finalCode = code || roomCode;
 
+        console.log('Join attempt - userId:', userId, 'code:', finalCode);
+
         if (!finalCode) {
             return res.status(400).json({ error: 'Room code is required' });
         }
@@ -117,19 +119,29 @@ export const joinStudyRoom = async (req, res) => {
         let studyRoom = await StudyRoom.findOne({ code: finalCode });
         
         if (!studyRoom) {
-            return res.status(404).json({ error: 'Study room not found' });
+            console.log('Room not found with code:', finalCode);
+            return res.status(404).json({ error: 'Study room not found with this code' });
         }
+
+        console.log('Room found:', studyRoom.name, 'isPrivate:', studyRoom.isPrivate);
 
         // Check if user is removed
         if (studyRoom.isRemoved(userId)) {
-            return res.status(403).json({ error: 'You have been removed from this room' });
+            console.log('User is removed from room');
+            return res.status(403).json({ error: 'You have been removed from this room', removed: true });
         }
 
         // Check if already a participant or owner
-        if (studyRoom.isParticipant(userId) || studyRoom.isOwner(userId)) {
+        const isOwner = studyRoom.isOwner(userId);
+        const isParticipant = studyRoom.isParticipant(userId);
+        
+        console.log('isOwner:', isOwner, 'isParticipant:', isParticipant);
+
+        if (isParticipant || isOwner) {
             await studyRoom.populate('owner', 'email name');
             await studyRoom.populate('participants.user', 'email name');
             
+            console.log('User already in room');
             return res.status(200).json({
                 message: 'You are already in this study room',
                 studyRoom
@@ -156,6 +168,7 @@ export const joinStudyRoom = async (req, res) => {
         .populate('participants.user', 'email name');
 
         if (!updated) {
+            console.log('Update failed, fetching room again');
             // User already in participants, fetch and return
             const room = await StudyRoom.findOne({ code: finalCode })
                 .populate('owner', 'email name')
@@ -167,13 +180,14 @@ export const joinStudyRoom = async (req, res) => {
             });
         }
 
+        console.log('Successfully joined room');
         res.status(200).json({
             message: 'Successfully joined study room',
             studyRoom: updated
         });
     } catch (error) {
         console.error('Join study room error:', error);
-        res.status(500).json({ error: 'Failed to join study room' });
+        res.status(500).json({ error: 'Failed to join study room: ' + error.message });
     }
 };
 
@@ -183,21 +197,34 @@ export const joinStudyRoomById = async (req, res) => {
         const { id } = req.params;
         const userId = getUserId(req);
 
-        // Use findOneAndUpdate with arrayFilters for true atomic upsert-like behavior
-        // This approach: check in the SAME atomic operation
+        // First, fetch the room to check ownership and access
+        const studyRoom = await StudyRoom.findById(id)
+            .populate('owner', 'email name')
+            .populate('participants.user', 'email name');
+        
+        if (!studyRoom) {
+            return res.status(404).json({ error: 'Study room not found' });
+        }
+        
+        // Check if user is removed
+        if (studyRoom.isRemoved(userId)) {
+            return res.status(403).json({ error: 'You have been removed from this room', removed: true });
+        }
+        
+        // Check if user is already owner or participant
+        if (studyRoom.isOwner(userId) || studyRoom.isParticipant(userId)) {
+            return res.status(200).json({
+                message: 'You are already in this study room',
+                studyRoom,
+                alreadyJoined: true
+            });
+        }
+
+        // Try to join the room atomically
         const updated = await StudyRoom.findOneAndUpdate(
             {
                 _id: id,
-                // Ensure user is not already in participants AND is not removed
-                'participants.user': { $ne: userId },
-                $and: [
-                    {
-                        $or: [
-                            { 'removedUsers.user': { $ne: userId } },
-                            { removedUsers: { $size: 0 } }
-                        ]
-                    }
-                ]
+                'participants.user': { $ne: userId }
             },
             {
                 $push: {
@@ -213,23 +240,14 @@ export const joinStudyRoomById = async (req, res) => {
         .populate('participants.user', 'email name');
 
         if (!updated) {
-            // Either room not found, user already in, or user is removed
-            const studyRoom = await StudyRoom.findById(id)
+            // Race condition - user was added between checks
+            const refreshedRoom = await StudyRoom.findById(id)
                 .populate('owner', 'email name')
                 .populate('participants.user', 'email name');
             
-            if (!studyRoom) {
-                return res.status(404).json({ error: 'Study room not found' });
-            }
-            
-            if (studyRoom.isRemoved(userId)) {
-                return res.status(403).json({ error: 'You have been removed from this room' });
-            }
-            
-            // User already in room
             return res.status(200).json({
                 message: 'You are already in this study room',
-                studyRoom,
+                studyRoom: refreshedRoom,
                 alreadyJoined: true
             });
         }
@@ -249,7 +267,9 @@ export const joinStudyRoomById = async (req, res) => {
 export const getStudyRoomById = async (req, res) => {
     try {
         const { id } = req.params;
-    const userId = getUserId(req);
+        const userId = getUserId(req);
+
+        console.log('getStudyRoomById - userId:', userId, 'roomId:', id);
 
         const studyRoom = await StudyRoom.findById(id)
             .populate('owner', 'email name')
@@ -257,14 +277,32 @@ export const getStudyRoomById = async (req, res) => {
             .populate('files.uploadedBy', 'email name');
 
         if (!studyRoom) {
+            console.log('Room not found');
             return res.status(404).json({ error: 'Study room not found' });
         }
 
-        // Check if user has access
-        if (studyRoom.isPrivate && !studyRoom.isParticipant(userId) && !studyRoom.isOwner(userId)) {
-            return res.status(403).json({ error: 'You do not have access to this study room' });
+        console.log('Room found:', studyRoom.name, 'isPrivate:', studyRoom.isPrivate);
+        console.log('Owner ID:', studyRoom.owner._id ? studyRoom.owner._id.toString() : studyRoom.owner);
+        console.log('Participants:', studyRoom.participants.map(p => p.user._id ? p.user._id.toString() : p.user));
+
+        // Check if user is removed from the room
+        if (studyRoom.isRemoved(userId)) {
+            console.log('User is removed');
+            return res.status(403).json({ error: 'You have been removed from this study room', removed: true });
         }
 
+        const isOwner = studyRoom.isOwner(userId);
+        const isParticipant = studyRoom.isParticipant(userId);
+        
+        console.log('isOwner:', isOwner, 'isParticipant:', isParticipant);
+
+        // Check if user has access to private room
+        if (studyRoom.isPrivate && !isParticipant && !isOwner) {
+            console.log('Access denied - private room');
+            return res.status(403).json({ error: 'You do not have access to this private study room' });
+        }
+
+        console.log('Access granted');
         res.status(200).json({ studyRoom });
     } catch (error) {
         console.error('Get study room error:', error);

@@ -8,6 +8,10 @@ import StudyRoomList from '../screens/StudyRoomList';
 import Quiz from '../screens/Quiz';
 import Interview from '../screens/Interview';
 import SocketTest from '../screens/SocketTest';
+import MockInterviewDashboard from '../screens/MockInterviewDashboard';
+import NewMockInterview from '../screens/NewMockInterview';
+import MockInterviewSession from '../pages/mock-interview/MockInterviewSession';
+import MockInterviewFeedback from '../pages/mock-interview/MockInterviewFeedback';
 import UserAuth from '../auth/userAuth';
 
 const AppRoutes = () => {
@@ -30,6 +34,12 @@ const AppRoutes = () => {
 
         {/* Interview Module */}
         <Route path="/interview" element={<UserAuth><Interview /></UserAuth>} />
+
+        {/* Mock Interview Module */}
+        <Route path="/mock-interview" element={<UserAuth><MockInterviewDashboard /></UserAuth>} />
+        <Route path="/mock-interview/new" element={<UserAuth><NewMockInterview /></UserAuth>} />
+        <Route path="/mock-interview/session/:id" element={<UserAuth><MockInterviewSession /></UserAuth>} />
+        <Route path="/mock-interview/feedback/:id" element={<UserAuth><MockInterviewFeedback /></UserAuth>} />
 
         {/* Legacy Project routes (keep for backward compatibility) */}
         <Route path="/project" element={<UserAuth><Project /></UserAuth>} />

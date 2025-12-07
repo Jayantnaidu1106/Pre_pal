@@ -87,17 +87,24 @@ studyRoomSchema.statics.generateRoomCode = function() {
 
 // Check if a user is the owner
 studyRoomSchema.methods.isOwner = function(userId) {
-    return this.owner.toString() === userId.toString();
+    const ownerId = this.owner._id ? this.owner._id.toString() : this.owner.toString();
+    return ownerId === userId.toString();
 };
 
 // Check if a user is a participant
 studyRoomSchema.methods.isParticipant = function(userId) {
-    return this.participants.some(p => p.user.toString() === userId.toString());
+    return this.participants.some(p => {
+        const participantId = p.user._id ? p.user._id.toString() : p.user.toString();
+        return participantId === userId.toString();
+    });
 };
 
 // Check if a user is removed
 studyRoomSchema.methods.isRemoved = function(userId) {
-    return this.removedUsers.some(r => r.user.toString() === userId.toString());
+    return this.removedUsers.some(r => {
+        const removedUserId = r.user._id ? r.user._id.toString() : r.user.toString();
+        return removedUserId === userId.toString();
+    });
 };
 
 // Pre-save hook to prevent duplicate participants

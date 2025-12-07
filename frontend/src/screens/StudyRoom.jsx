@@ -29,6 +29,11 @@ const StudyRoom = () => {
   const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // For message context menu
   const [fileDeleteMenu, setFileDeleteMenu] = useState(null); // For file delete dropdown
+  const [hoveredMessage, setHoveredMessage] = useState(null); // Track hovered message
+  const [selectionMode, setSelectionMode] = useState(false); // Multi-select mode
+  const [selectedMessages, setSelectedMessages] = useState([]); // Selected message IDs
+  const [editingMessage, setEditingMessage] = useState(null); // Message being edited
+  const [editText, setEditText] = useState(''); // Edited message text
 
   const { user } = useUser();
 
@@ -96,18 +101,34 @@ const StudyRoom = () => {
       if (data.removed) {
         alert('You have been removed from this study room due to inappropriate content.');
         navigate('/studyrooms');
-        }
-      });
+      }
+    });
 
-      // Listen for user kicked
-      recieveMessage('user-kicked', (data) => {
-        if (data.userId === user._id) {
-          alert('You have been removed from this study room by the owner.');
-          navigate('/studyrooms');
-        } else {
-          fetchStudyRoom(); // Refresh participant list
-        }
-      });
+    // Listen for permanent ban
+    recieveMessage('permanently-banned', (data) => {
+      alert(`🚫 ${data.message}\n\nYou cannot rejoin this room.`);
+      navigate('/studyrooms');
+    });
+
+    // Listen for user removed (for other participants to see)
+    recieveMessage('user-removed', (data) => {
+      fetchStudyRoom(); // Refresh participant list
+    });
+
+    // Listen for participants updated
+    recieveMessage('participants-updated', (data) => {
+      setStudyRoom(prev => ({ ...prev, participants: data.participants }));
+    });
+
+    // Listen for user kicked
+    recieveMessage('user-kicked', (data) => {
+      if (data.userId === user._id) {
+        alert('You have been removed from this study room by the owner.');
+        navigate('/studyrooms');
+      } else {
+        fetchStudyRoom(); // Refresh participant list
+      }
+    });
 
     // Listen for file events
     recieveMessage('file-uploaded', () => {
@@ -125,6 +146,15 @@ const StudyRoom = () => {
 
     recieveMessage('message-deleted-for-everyone', (data) => {
       setMessages(prev => prev.filter(msg => msg._id !== data.messageId));
+    });
+
+    // Listen for message edit events
+    recieveMessage('message-edited', (data) => {
+      setMessages(prev => prev.map(msg => 
+        msg._id === data.messageId 
+          ? { ...msg, message: data.newMessage, edited: true } 
+          : msg
+      ));
     });
 
     recieveMessage('all-chat-cleared-for-me', () => {
@@ -150,10 +180,23 @@ const StudyRoom = () => {
       if (shouldJoin && !isJoining) {
         setIsJoining(true); // Prevent concurrent join attempts
         try {
-          await api.post(`/studyroom/join/${id}`);
-          console.log('Successfully joined study room');
+          const joinResponse = await api.post(`/studyroom/join/${id}`);
+          console.log('Join response:', joinResponse.data.message);
         } catch (joinErr) {
-          // If join fails, we'll still try to fetch the room details
+          // If join fails with 403 (removed/no access), handle it
+          if (joinErr.response?.status === 403) {
+            const errorMsg = joinErr.response?.data?.error || 'Access denied';
+            setError(errorMsg);
+            setLoading(false);
+            if (joinErr.response?.data?.removed) {
+              alert('🚫 You have been permanently removed from this study room and cannot access it.');
+              navigate('/studyrooms');
+              return;
+            }
+            setTimeout(() => navigate('/studyrooms'), 2000);
+            return;
+          }
+          // For other errors, log and continue to try fetching room details
           console.log('Join attempt:', joinErr.response?.data?.message || joinErr.message);
         } finally {
           // Keep isJoining true to prevent re-joining during this session
@@ -165,7 +208,16 @@ const StudyRoom = () => {
       setStudyRoom(response.data.studyRoom);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch study room');
+      const errorMsg = err.response?.data?.error || 'Failed to fetch study room';
+      setError(errorMsg);
+      
+      // Handle removed/banned users
+      if (err.response?.data?.removed) {
+        alert('🚫 You have been permanently removed from this study room and cannot access it.');
+        navigate('/studyrooms');
+        return;
+      }
+      
       if (err.response?.status === 403 || err.response?.status === 404) {
         setTimeout(() => navigate('/studyrooms'), 2000);
       }
@@ -375,6 +427,90 @@ const StudyRoom = () => {
     }
   };
 
+  const handleToggleSelection = (messageId) => {
+    setSelectedMessages(prev => {
+      if (prev.includes(messageId)) {
+        return prev.filter(id => id !== messageId);
+      } else {
+        return [...prev, messageId];
+      }
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedMessages.length === 0) return;
+    
+    // Check if user can delete all selected messages
+    const canDeleteAll = selectedMessages.every(msgId => {
+      const msg = messages.find(m => m._id === msgId);
+      return msg && (msg.isOwn || isOwner);
+    });
+    
+    if (!canDeleteAll) {
+      alert('You can only delete your own messages. Owner can delete any message.');
+      return;
+    }
+    
+    if (window.confirm(`Delete ${selectedMessages.length} message(s) for everyone?`)) {
+      selectedMessages.forEach(messageId => {
+        sendMessage('delete-message-for-everyone', { messageId });
+      });
+      setMessages(prev => prev.filter(msg => !selectedMessages.includes(msg._id)));
+      setSelectedMessages([]);
+      setSelectionMode(false);
+    }
+  };
+
+  const handleCopyMessage = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Message copied to clipboard!');
+    }).catch(() => {
+      alert('Failed to copy message');
+    });
+    setHoveredMessage(null);
+  };
+
+  const handleEditMessage = (msg) => {
+    setEditingMessage(msg);
+    setEditText(msg.message);
+    setHoveredMessage(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editText.trim() || !editingMessage) return;
+    
+    sendMessage('edit-message', {
+      messageId: editingMessage._id,
+      newMessage: editText
+    });
+    
+    // Update local state
+    setMessages(prev => prev.map(msg => 
+      msg._id === editingMessage._id ? { ...msg, message: editText, edited: true } : msg
+    ));
+    
+    setEditingMessage(null);
+    setEditText('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setEditText('');
+  };
+
+  const handleSelectMessage = (msg) => {
+    if (!selectionMode) {
+      setSelectionMode(true);
+    }
+    handleToggleSelection(msg._id);
+    setHoveredMessage(null);
+  };
+
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedMessages([]);
+  };
+
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -459,10 +595,10 @@ const StudyRoom = () => {
             <button
               onClick={handleClearAllChat}
               className="flex items-center gap-1 bg-orange-500 bg-opacity-80 px-3 py-1 rounded text-white text-sm hover:bg-opacity-100"
-              title="Clear all messages for me"
+              title="Clear all messages for me only"
             >
               <i className="ri-delete-bin-line"></i>
-              Clear Chat
+              Clear for Me
             </button>
             {isOwner && (
               <button
@@ -485,38 +621,129 @@ const StudyRoom = () => {
           </div>
         </div>
 
+        {/* Selection Mode Bar */}
+        {selectionMode && (
+          <div className="bg-yellow-100 border-b border-yellow-300 p-3 flex justify-between items-center">
+            <span className="text-sm font-medium text-yellow-800">
+              {selectedMessages.length} message(s) selected
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedMessages.length === 0}
+                className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 disabled:opacity-50"
+              >
+                <i className="ri-delete-bin-line"></i> Delete Selected
+              </button>
+              <button
+                onClick={handleCancelSelection}
+                className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Messages */}
-        <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50" onClick={() => setContextMenu(null)}>
+        <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-gray-50" onClick={() => { setContextMenu(null); setHoveredMessage(null); }}>
           {messages.map((msg) => {
             const isAI = msg.user?.email === 'ai@example.com';
+            const isSelected = selectedMessages.includes(msg._id);
+            const isHovered = hoveredMessage === msg._id;
+            const canEdit = msg.isOwn && !isAI;
+            
             return (
               <div
                 key={msg._id || msg.id}
-                className={`flex flex-col ${msg.isOwn ? 'items-end text-right' : 'items-start'}`}
+                className={`flex flex-col ${msg.isOwn ? 'items-end text-right' : 'items-start'} relative group`}
+                onMouseEnter={() => setHoveredMessage(msg._id)}
+                onMouseLeave={() => setHoveredMessage(null)}
                 onContextMenu={(e) => handleMessageRightClick(e, msg)}
               >
+                {/* Selection Checkbox */}
+                {(selectionMode || isSelected) && !isAI && (
+                  <div className={`absolute ${msg.isOwn ? 'right-0' : 'left-0'} top-0 z-10`}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelection(msg._id)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </div>
+                )}
+
                 <span className={`text-xs font-medium ${
                   isAI ? 'text-blue-600' : 'text-gray-600'
                 } flex items-center gap-1`}>
                   {isAI && <i className="ri-robot-line"></i>}
                   {msg.user?.name || msg.user?.email || msg.sender?.name || msg.sender?.email || 'Unknown'}
+                  {msg.edited && <span className="text-gray-400 italic">(edited)</span>}
                 </span>
-                <div
-                  className={`px-4 py-3 rounded-lg max-w-[80%] text-sm shadow-sm ${
-                    isAI 
-                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200' 
-                      : msg.isOwn 
-                        ? 'bg-indigo-500 text-white' 
-                        : 'bg-white border border-gray-200'
-                  }`}
-                >
+
+                <div className="relative">
+                  {/* Dropdown Menu on Hover */}
+                  {isHovered && !isAI && !selectionMode && (
+                    <div className={`absolute ${msg.isOwn ? 'right-0' : 'left-0'} top-0 -mt-8 bg-white shadow-lg rounded-lg border border-gray-200 z-20 flex gap-1 p-1`}>
+                      <button
+                        onClick={() => handleSelectMessage(msg)}
+                        className="px-2 py-1 hover:bg-gray-100 rounded text-xs flex items-center gap-1"
+                        title="Select"
+                      >
+                        <i className="ri-checkbox-line"></i> Select
+                      </button>
+                      <button
+                        onClick={() => handleCopyMessage(msg.message)}
+                        className="px-2 py-1 hover:bg-gray-100 rounded text-xs flex items-center gap-1"
+                        title="Copy"
+                      >
+                        <i className="ri-file-copy-line"></i> Copy
+                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => handleEditMessage(msg)}
+                          className="px-2 py-1 hover:bg-gray-100 rounded text-xs flex items-center gap-1"
+                          title="Edit"
+                        >
+                          <i className="ri-edit-line"></i> Edit
+                        </button>
+                      )}
+                      {(msg.isOwn || isOwner) && (
+                        <button
+                          onClick={() => {
+                            if (confirm('Delete this message for everyone?')) {
+                              sendMessage('delete-message-for-everyone', { messageId: msg._id });
+                              setMessages(prev => prev.filter(m => m._id !== msg._id));
+                              setHoveredMessage(null);
+                            }
+                          }}
+                          className="px-2 py-1 hover:bg-red-100 text-red-600 rounded text-xs flex items-center gap-1"
+                          title={msg.isOwn ? "Delete" : "Delete (Owner)"}
+                        >
+                          <i className="ri-delete-bin-line"></i> {msg.isOwn ? 'Delete' : 'Remove'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    className={`px-4 py-2.5 rounded-2xl min-w-[100px] max-w-[75%] md:max-w-[65%] text-sm shadow-sm break-words ${
+                      isSelected ? 'ring-2 ring-yellow-400' : ''
+                    } ${
+                      isAI 
+                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200' 
+                        : msg.isOwn 
+                          ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white' 
+                          : 'bg-white border border-gray-200 text-gray-800'
+                    }`}
+                  >
                   {isAI ? (
                     <Markdown
                       options={{
                         wrapper: 'div',
                         forceWrapper: true,
                         overrides: {
-                          p: { props: { style: { margin: '0.5em 0', color: '#1e40af' } } },
+                          p: { props: { style: { margin: '0.5em 0', color: '#1e40af', wordBreak: 'break-word' } } },
                           code: {
                             props: {
                               style: {
@@ -524,7 +751,21 @@ const StudyRoom = () => {
                                 color: '#1e3a8a',
                                 padding: '2px 6px',
                                 borderRadius: '4px',
-                                fontSize: '0.9em'
+                                fontSize: '0.85em',
+                                wordBreak: 'break-all'
+                              }
+                            }
+                          },
+                          pre: {
+                            props: {
+                              style: {
+                                backgroundColor: '#1e293b',
+                                color: '#e2e8f0',
+                                padding: '8px',
+                                borderRadius: '6px',
+                                overflow: 'auto',
+                                fontSize: '0.8em',
+                                maxWidth: '100%'
                               }
                             }
                           }
@@ -534,11 +775,19 @@ const StudyRoom = () => {
                       {msg.message}
                     </Markdown>
                   ) : (
-                    msg.message
+                    <div className="whitespace-pre-wrap break-words">
+                      {msg.message}
+                    </div>
                   )}
-                  <div className={`text-[10px] mt-1 ${msg.isOwn ? 'text-indigo-100' : 'text-gray-500'}`}>
-                    {formatTime(msg.timestamp)}
+                  <div className={`text-[10px] mt-1.5 flex items-center gap-1 ${
+                    msg.isOwn ? 'text-indigo-100' : 'text-gray-400'
+                  }`}>
+                    <span>{formatTime(msg.timestamp)}</span>
+                    {msg.edited && (
+                      <span className="italic opacity-75">• edited</span>
+                    )}
                   </div>
+                </div>
                 </div>
               </div>
             );
@@ -574,6 +823,48 @@ const StudyRoom = () => {
 
         {/* Input */}
         <div className="bg-white p-4 border-t">
+          {/* Edit Mode */}
+          {editingMessage && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-blue-800">
+                  <i className="ri-edit-line"></i> Editing message
+                </span>
+                <button
+                  onClick={handleCancelEdit}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  <i className="ri-close-line"></i>
+                </button>
+              </div>
+              <input
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveEdit();
+                  if (e.key === 'Escape') handleCancelEdit();
+                }}
+                className="w-full p-2 border border-blue-300 rounded mb-2"
+                placeholder="Edit your message..."
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <input
               type="file"
@@ -583,7 +874,7 @@ const StudyRoom = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingFile}
+              disabled={uploadingFile || editingMessage}
               className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition disabled:bg-gray-50"
               title="Upload file"
             >
@@ -598,15 +889,17 @@ const StudyRoom = () => {
               type="text"
               placeholder="Type your message... (Use @ai for AI help)"
               className="flex-1 p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={editingMessage}
             />
             <button
               onClick={handleSendMessage}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              disabled={editingMessage}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
             >
               <i className="ri-send-plane-fill"></i>
             </button>
           </div>
-          {newMessage.includes('@ai') && (
+          {newMessage.includes('@ai') && !editingMessage && (
             <div className="mt-2 text-xs text-blue-600 flex items-center gap-1">
               <i className="ri-robot-line"></i>
               <span>AI will respond to your message</span>
