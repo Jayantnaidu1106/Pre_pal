@@ -42,7 +42,7 @@ const Register = () => {
       localStorage.setItem('user', JSON.stringify(response.data.user));
 
       // Redirect to home page
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Registration failed. Please try again.');
     } finally {

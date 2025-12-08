@@ -32,7 +32,7 @@ const Login = () => {
       localStorage.setItem('user', JSON.stringify(response.data.user));
 
       // Checkpoint: Redirect to home page
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Login failed. Please try again.');
     } finally {

@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from '../pages/LandingPage';
 import Home from '../screens/Home';
 import Login from '../screens/Login';
 import Register from '../screens/Register';
@@ -18,8 +19,11 @@ const AppRoutes = () => {
   return (
     <Router>
       <Routes>
-        {/* Dashboard Home */}
-        <Route path="/" element={<UserAuth><Home /></UserAuth>} />
+        {/* Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* Dashboard Home (Protected) */}
+        <Route path="/dashboard" element={<UserAuth><Home /></UserAuth>} />
 
         {/* Authentication routes */}
         <Route path="/login" element={<Login />} />
@@ -48,7 +52,7 @@ const AppRoutes = () => {
         {/* Socket.IO Test route */}
         <Route path="/socket-test" element={<UserAuth><SocketTest /></UserAuth>} />
 
-        {/* Catch all route - redirect to home */}
+        {/* Catch all route - redirect to landing page if not logged in, or dashboard if logged in (logic can be refined, simple redirect for now) */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
