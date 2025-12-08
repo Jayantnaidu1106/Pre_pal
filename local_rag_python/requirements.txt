@@ -1,8 +1,6 @@
-langchain==0.0.350
-chromadb
-sentence-transformers
-pypdf
-gpt4all
 flask
-flask-cors
-numpy<2
+chromadb
+gpt4all
+pypdf
+sentence-transformers
+numpy
