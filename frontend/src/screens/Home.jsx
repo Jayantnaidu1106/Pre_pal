@@ -19,7 +19,7 @@ const Home = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   if (loading) {
@@ -64,7 +64,7 @@ const Home = () => {
         {/* Module Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           {/* Study Rooms Card */}
-          <div 
+          <div
             onClick={() => navigate('/studyrooms')}
             className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-all cursor-pointer transform hover:-translate-y-2 border-t-4 border-indigo-500"
           >
@@ -85,7 +85,7 @@ const Home = () => {
           </div>
 
           {/* Quiz Generator Card */}
-          <div 
+          <div
             onClick={() => navigate('/quiz')}
             className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-all cursor-pointer transform hover:-translate-y-2 border-t-4 border-green-500"
           >
@@ -106,7 +106,7 @@ const Home = () => {
           </div>
 
           {/* Mock Interview Card */}
-          <div 
+          <div
             onClick={() => navigate('/interview')}
             className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-all cursor-pointer transform hover:-translate-y-2 border-t-4 border-orange-500"
           >
