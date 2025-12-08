@@ -24,11 +24,11 @@ const getUserId = (req) => {
 // Create a new study room
 export const createStudyRoom = async (req, res) => {
     try {
-    const { name, isPrivate } = req.body;
-    // debug: show decoded token payload when creating room
-    console.debug('createStudyRoom - req.user:', req.user);
-    const ownerId = getUserId(req);
-    console.debug('createStudyRoom - resolved ownerId:', ownerId);
+        const { name, isPrivate } = req.body;
+        // debug: show decoded token payload when creating room
+        console.debug('createStudyRoom - req.user:', req.user);
+        const ownerId = getUserId(req);
+        console.debug('createStudyRoom - resolved ownerId:', ownerId);
 
         if (!name || name.trim() === '') {
             return res.status(400).json({ error: 'Study room name is required' });
@@ -83,7 +83,7 @@ export const getPublicStudyRooms = async (req, res) => {
 // Get user's study rooms (as owner or participant)
 export const getUserStudyRooms = async (req, res) => {
     try {
-    const userId = getUserId(req);
+        const userId = getUserId(req);
 
         const rooms = await StudyRoom.find({
             $or: [
@@ -117,7 +117,7 @@ export const joinStudyRoom = async (req, res) => {
 
         // First find the room
         let studyRoom = await StudyRoom.findOne({ code: finalCode });
-        
+
         if (!studyRoom) {
             console.log('Room not found with code:', finalCode);
             return res.status(404).json({ error: 'Study room not found with this code' });
@@ -134,13 +134,13 @@ export const joinStudyRoom = async (req, res) => {
         // Check if already a participant or owner
         const isOwner = studyRoom.isOwner(userId);
         const isParticipant = studyRoom.isParticipant(userId);
-        
+
         console.log('isOwner:', isOwner, 'isParticipant:', isParticipant);
 
         if (isParticipant || isOwner) {
             await studyRoom.populate('owner', 'email name');
             await studyRoom.populate('participants.user', 'email name');
-            
+
             console.log('User already in room');
             return res.status(200).json({
                 message: 'You are already in this study room',
@@ -164,8 +164,8 @@ export const joinStudyRoom = async (req, res) => {
             },
             { new: true }
         )
-        .populate('owner', 'email name')
-        .populate('participants.user', 'email name');
+            .populate('owner', 'email name')
+            .populate('participants.user', 'email name');
 
         if (!updated) {
             console.log('Update failed, fetching room again');
@@ -173,7 +173,7 @@ export const joinStudyRoom = async (req, res) => {
             const room = await StudyRoom.findOne({ code: finalCode })
                 .populate('owner', 'email name')
                 .populate('participants.user', 'email name');
-            
+
             return res.status(200).json({
                 message: 'You are already in this study room',
                 studyRoom: room
@@ -201,16 +201,16 @@ export const joinStudyRoomById = async (req, res) => {
         const studyRoom = await StudyRoom.findById(id)
             .populate('owner', 'email name')
             .populate('participants.user', 'email name');
-        
+
         if (!studyRoom) {
             return res.status(404).json({ error: 'Study room not found' });
         }
-        
+
         // Check if user is removed
         if (studyRoom.isRemoved(userId)) {
             return res.status(403).json({ error: 'You have been removed from this room', removed: true });
         }
-        
+
         // Check if user is already owner or participant
         if (studyRoom.isOwner(userId) || studyRoom.isParticipant(userId)) {
             return res.status(200).json({
@@ -236,15 +236,15 @@ export const joinStudyRoomById = async (req, res) => {
             },
             { new: true }
         )
-        .populate('owner', 'email name')
-        .populate('participants.user', 'email name');
+            .populate('owner', 'email name')
+            .populate('participants.user', 'email name');
 
         if (!updated) {
             // Race condition - user was added between checks
             const refreshedRoom = await StudyRoom.findById(id)
                 .populate('owner', 'email name')
                 .populate('participants.user', 'email name');
-            
+
             return res.status(200).json({
                 message: 'You are already in this study room',
                 studyRoom: refreshedRoom,
@@ -282,8 +282,11 @@ export const getStudyRoomById = async (req, res) => {
         }
 
         console.log('Room found:', studyRoom.name, 'isPrivate:', studyRoom.isPrivate);
-        console.log('Owner ID:', studyRoom.owner._id ? studyRoom.owner._id.toString() : studyRoom.owner);
-        console.log('Participants:', studyRoom.participants.map(p => p.user._id ? p.user._id.toString() : p.user));
+        const ownerIdStr = studyRoom.owner && studyRoom.owner._id ? studyRoom.owner._id.toString() : (studyRoom.owner ? studyRoom.owner.toString() : 'unknown');
+        console.log('Owner ID:', ownerIdStr);
+
+        const participantIds = studyRoom.participants ? studyRoom.participants.map(p => p.user && p.user._id ? p.user._id.toString() : (p.user ? p.user.toString() : 'unknown')) : [];
+        console.log('Participants:', participantIds);
 
         // Check if user is removed from the room
         if (studyRoom.isRemoved(userId)) {
@@ -293,7 +296,7 @@ export const getStudyRoomById = async (req, res) => {
 
         const isOwner = studyRoom.isOwner(userId);
         const isParticipant = studyRoom.isParticipant(userId);
-        
+
         console.log('isOwner:', isOwner, 'isParticipant:', isParticipant);
 
         // Check if user has access to private room
@@ -314,7 +317,7 @@ export const getStudyRoomById = async (req, res) => {
 export const removeParticipant = async (req, res) => {
     try {
         const { roomId, userId: participantId } = req.body;
-    const ownerId = getUserId(req);
+        const ownerId = getUserId(req);
 
         const studyRoom = await StudyRoom.findById(roomId);
 
@@ -358,7 +361,7 @@ export const removeParticipant = async (req, res) => {
 export const leaveStudyRoom = async (req, res) => {
     try {
         const { roomId } = req.body;
-    const userId = getUserId(req);
+        const userId = getUserId(req);
 
         const studyRoom = await StudyRoom.findById(roomId);
 
