@@ -13,6 +13,7 @@ const Quiz = () => {
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
   const [error, setError] = useState('');
+  const [numQuestions, setNumQuestions] = useState(5);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -32,7 +33,7 @@ const Quiz = () => {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('numQuestions', 5);
+    formData.append('numQuestions', numQuestions.toString());
 
     try {
       const response = await axios.post('/ai/generate-quiz', formData, {
@@ -238,6 +239,23 @@ const Quiz = () => {
                   <i className="ri-error-warning-line"></i> {error}
                 </div>
               )}
+
+              <div className="mt-6">
+                <label className="block text-gray-700 font-semibold mb-2 text-left">Number of Questions</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={numQuestions}
+                    onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+                  />
+                  <span className="bg-green-100 text-green-700 font-bold px-3 py-1 rounded-lg w-12 text-center">
+                    {numQuestions}
+                  </span>
+                </div>
+              </div>
 
               <button
                 onClick={handleGenerateQuiz}

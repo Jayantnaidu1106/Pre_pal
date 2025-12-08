@@ -4,6 +4,12 @@ const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs';
+import path from 'path';
+import fetch from 'node-fetch'; // Requires node-fetch or native fetch in Node 18+
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Feature-specific API keys
 const FEATURE_KEYS = {
@@ -395,5 +401,58 @@ export const generateQuizService = async (file, numQuestions = 5) => {
     } catch (error) {
         console.error('Quiz Generation Error:', error);
         throw new Error(`Failed to generate quiz: ${error.message}`);
+    }
+};
+
+/**
+ * Generate Quiz using Local Python RAG Service
+ */
+export const generateQuizLocal = async (file, numQuestions = 5) => {
+    try {
+        // 1. Save file temporarily
+        const tempDir = path.join(__dirname, '../uploads/temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${file.originalname}`);
+        fs.writeFileSync(tempFilePath, file.buffer);
+
+        console.log(`Saved temp file for RAG: ${tempFilePath}`);
+
+        // 2. Call Python Flask API
+        try {
+            const response = await fetch('http://127.0.0.1:5000/generate-quiz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file_path: tempFilePath,
+                    num_questions: numQuestions
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Python API error: ${response.statusText}`);
+            }
+
+            const quizData = await response.json();
+            return quizData;
+
+        } finally {
+            // 3. Cleanup temp file
+            try {
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                    console.log(`Cleaned up temp file: ${tempFilePath}`);
+                }
+            } catch (cleanupError) {
+                console.error('Failed to cleanup temp file:', cleanupError);
+            }
+        }
+
+    } catch (error) {
+        console.error('Local Quiz Generation Error:', error);
+        throw new Error(`Failed to generate local quiz: ${error.message}`);
     }
 };
