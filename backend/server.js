@@ -15,7 +15,7 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
 
 const server = http.createServer(app);
 
-const io = new Server(server,{
+const io = new Server(server, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST']
@@ -28,38 +28,38 @@ const activeUsers = new Map();
 // Track whiteboard state per project
 const whiteboardState = new Map();
 
-io.use(async (socket,next)=>{
-    try{
+io.use(async (socket, next) => {
+    try {
         const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
         const projectId = socket.handshake.headers?.projectid || socket.handshake.query?.projectId || socket.handshake.auth?.projectId;
 
         // Checkpoint: Validate token
-        if(!token){
+        if (!token) {
             return next(new Error('Unauthorized - No token provided'));
         }
 
-        const decoded = jwt.verify(token,process.env.JWT_SECRET);
-        if(!decoded){
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!decoded) {
             return next(new Error('Unauthorized - Invalid token'));
         }
         socket.user = decoded;
 
         // Checkpoint: Validate project/studyroom if provided
-        if(projectId){
-            if(!mongoose.Types.ObjectId.isValid(projectId)){
+        if (projectId) {
+            if (!mongoose.Types.ObjectId.isValid(projectId)) {
                 return next(new Error('Invalid project ID format'));
             }
 
             // Try to find as project first (backward compatibility)
             let project = await projectModel.findById(projectId);
-            
+
             // Get consistent user ID
             const userId = (decoded._id || decoded.userId || decoded.id);
             const userIdStr = userId?.toString();
-            
-            if(project){
+
+            if (project) {
                 // Check if user is removed from project
-                if(project.removedUsers && project.removedUsers.some(r => r.user.toString() === userIdStr)){
+                if (project.removedUsers && project.removedUsers.some(r => r.user.toString() === userIdStr)) {
                     return next(new Error('You have been permanently removed from this room'));
                 }
                 socket.project = project;
@@ -67,9 +67,9 @@ io.use(async (socket,next)=>{
             } else {
                 // Try as study room
                 const studyRoom = await StudyRoom.findById(projectId);
-                if(studyRoom){
+                if (studyRoom) {
                     // Check if user is removed from study room
-                    if(studyRoom.removedUsers && studyRoom.removedUsers.some(r => r.user.toString() === userIdStr)){
+                    if (studyRoom.removedUsers && studyRoom.removedUsers.some(r => r.user.toString() === userIdStr)) {
                         return next(new Error('You have been permanently removed from this room'));
                     }
                     socket.project = studyRoom;
@@ -88,7 +88,7 @@ io.use(async (socket,next)=>{
 
         next();
 
-    }catch(error){
+    } catch (error) {
         next(error);
     }
 });
@@ -101,7 +101,7 @@ io.on('connection', (socket) => {
 
     // Use consistent user ID (handle both _id and userId from token)
     const userId = socket.user._id || socket.user.userId || socket.user.id;
-    
+
     activeUsers.set(userId, {
         socketId: socket.id,
         userInfo: socket.user,
@@ -111,28 +111,28 @@ io.on('connection', (socket) => {
     socket.join(socket.roomId);
     console.log(`User ${userId} joined room ${socket.roomId}`);
 
-    socket.on('project-message', async (data)=>{
+    socket.on('project-message', async (data) => {
 
         const message = data.message;
 
         // Enhanced moderation: Check with AI for better detection
         try {
             const moderationResult = await aiModerateContent(message);
-            
-            if(moderationResult.inappropriate){
+
+            if (moderationResult.inappropriate) {
                 // Get the room (project or studyroom)
                 let room;
-                if(socket.roomType === 'project'){
+                if (socket.roomType === 'project') {
                     room = await projectModel.findById(socket.project._id)
                         .populate('owner', 'email')
                         .populate('users', 'email');
-                } else if(socket.roomType === 'studyroom'){
+                } else if (socket.roomType === 'studyroom') {
                     room = await StudyRoom.findById(socket.project._id)
                         .populate('owner', 'email')
                         .populate('participants.user', 'email');
                 }
 
-                if(room){
+                if (room) {
                     // Get consistent user ID
                     const userId = (socket.user._id || socket.user.userId || socket.user.id);
                     const result = await processWarning(room, userId);
@@ -145,7 +145,7 @@ io.on('connection', (socket) => {
                     });
 
                     // If user is removed, disconnect them and prevent rejoining
-                    if(result.removed){
+                    if (result.removed) {
 
                         // Remove from active users
                         activeUsers.delete(userId);
@@ -166,22 +166,22 @@ io.on('connection', (socket) => {
                         });
 
                         // Broadcast updated participant list
-                        if(socket.roomType === 'studyroom'){
+                        if (socket.roomType === 'studyroom') {
                             // Refresh room from database to get updated participants
                             const updatedRoom = await StudyRoom.findById(socket.project._id)
                                 .populate('participants.user', 'email name');
-                            
-                            if(updatedRoom){
+
+                            if (updatedRoom) {
                                 io.to(socket.roomId).emit('participants-updated', {
                                     participants: updatedRoom.participants
                                 });
                             }
-                        } else if(socket.roomType === 'project'){
+                        } else if (socket.roomType === 'project') {
                             // Also update for projects
                             const updatedProject = await projectModel.findById(socket.project._id)
                                 .populate('users', 'email name');
-                            
-                            if(updatedProject){
+
+                            if (updatedProject) {
                                 io.to(socket.roomId).emit('participants-updated', {
                                     participants: updatedProject.users
                                 });
@@ -206,29 +206,44 @@ io.on('connection', (socket) => {
 
         const aiIsPresentInMessage = message.includes('@ai');
 
-        if(aiIsPresentInMessage){
-            const prompt = message.replace('@ai','').trim();
-            
-            const result = await generateResult(prompt, 'STUDY_ROOM');
-            
-            // Save AI message to database
-            const aiMessage = new Message({
-                project: socket.project._id,
-                sender: socket.user._id || socket.user.userId,
-                message: result,
-                isAI: true,
-                timestamp: new Date()
-            });
-            await aiMessage.save();
-            
-            io.to(socket.roomId).emit('project-message',{
-                _id: aiMessage._id,
-                message: result,
-                sender: 'ai',
-                timestamp: aiMessage.timestamp,
-                user: {name:'AI', email:'ai@example.com'},
-                projectId: socket.project._id
-            });
+        if (aiIsPresentInMessage) {
+            try {
+                const prompt = message.replace('@ai', '').trim();
+
+                const result = await generateResult(prompt, 'STUDY_ROOM');
+
+                // Save AI message to database
+                const aiMessage = new Message({
+                    project: socket.project._id,
+                    sender: socket.user._id || socket.user.userId,
+                    message: result,
+                    isAI: true,
+                    timestamp: new Date()
+                });
+                await aiMessage.save();
+
+                io.to(socket.roomId).emit('project-message', {
+                    _id: aiMessage._id,
+                    message: result,
+                    sender: 'ai',
+                    timestamp: aiMessage.timestamp,
+                    user: { name: 'AI', email: 'ai@example.com' },
+                    projectId: socket.project._id
+                });
+            } catch (error) {
+                console.error('AI Processing Error:', error.message);
+
+                // Send error message only to the user who requested it, not the whole room
+                socket.emit('project-message', {
+                    _id: 'error-' + Date.now(),
+                    message: `⚠️ AI Service Error: ${error.message}. Please contact the administrator.`,
+                    sender: 'ai',
+                    timestamp: new Date(),
+                    user: { name: 'System', email: 'system@example.com' },
+                    projectId: socket.project._id,
+                    isError: true
+                });
+            }
             return;
         }
 
@@ -241,7 +256,7 @@ io.on('connection', (socket) => {
                 timestamp: data.timestamp || new Date()
             });
             await newMessage.save();
-            
+
             // Emit message with database ID
             io.to(socket.roomId).emit('project-message', {
                 ...data,
@@ -252,17 +267,17 @@ io.on('connection', (socket) => {
             io.to(socket.roomId).emit('project-message', data);
         }
     });
-    
+
     // Delete message for me
     socket.on('delete-message-for-me', async (data) => {
         try {
             const { messageId } = data;
             const userId = socket.user._id || socket.user.userId;
-            
+
             await Message.findByIdAndUpdate(messageId, {
                 $addToSet: { deletedBy: userId }
             });
-            
+
             socket.emit('message-deleted-for-me', { messageId });
         } catch (error) {
             console.error('Error deleting message for user:', error);
@@ -273,11 +288,11 @@ io.on('connection', (socket) => {
     socket.on('delete-message-for-everyone', async (data) => {
         try {
             const { messageId } = data;
-            
+
             await Message.findByIdAndUpdate(messageId, {
                 deletedForEveryone: true
             });
-            
+
             io.to(socket.roomId).emit('message-deleted-for-everyone', { messageId });
         } catch (error) {
             console.error('Error deleting message for everyone:', error);
@@ -289,28 +304,28 @@ io.on('connection', (socket) => {
         try {
             const { messageId, newMessage } = data;
             const userId = socket.user._id || socket.user.userId || socket.user.id;
-            
+
             // Find the message and verify ownership
             const message = await Message.findById(messageId);
             if (!message) {
                 return socket.emit('error', { message: 'Message not found' });
             }
-            
+
             // Check if user owns the message
             if (message.sender.toString() !== userId.toString()) {
                 return socket.emit('error', { message: 'You can only edit your own messages' });
             }
-            
+
             // Update the message
             await Message.findByIdAndUpdate(messageId, {
                 message: newMessage,
                 edited: true,
                 editedAt: new Date()
             });
-            
+
             // Broadcast to all users in the room
-            io.to(socket.roomId).emit('message-edited', { 
-                messageId, 
+            io.to(socket.roomId).emit('message-edited', {
+                messageId,
                 newMessage,
                 edited: true
             });
@@ -325,12 +340,12 @@ io.on('connection', (socket) => {
         try {
             const userId = socket.user._id || socket.user.userId;
             const projectId = socket.project._id;
-            
+
             await Message.updateMany(
                 { project: projectId },
                 { $addToSet: { deletedBy: userId } }
             );
-            
+
             socket.emit('all-chat-cleared-for-me');
         } catch (error) {
             console.error('Error clearing all chat:', error);
@@ -387,21 +402,21 @@ io.on('connection', (socket) => {
 
     socket.on('whiteboard:draw', (data) => {
         if (!data || !data.points) return;
-        
+
         console.log(`Whiteboard draw from user ${data.userId}, points: ${data.points.length}`);
-        
+
         // Store in whiteboard history
         const projectId = data.projectId || socket.roomId;
         const history = whiteboardState.get(projectId) || [];
         history.push(data);
-        
+
         // Limit history to last 1000 actions to prevent memory issues
         if (history.length > 1000) {
             history.shift();
         }
-        
+
         whiteboardState.set(projectId, history);
-        
+
         // Broadcast to ALL users in the room (including sender for sync)
         console.log(`Broadcasting draw to room ${socket.roomId}`);
         io.to(socket.roomId).emit('whiteboard:draw', data);
@@ -418,13 +433,13 @@ io.on('connection', (socket) => {
     socket.on('whiteboard:undo', (data) => {
         const projectId = data.projectId || socket.roomId;
         const history = whiteboardState.get(projectId) || [];
-        
+
         if (history.length > 0) {
             history.pop();
             whiteboardState.set(projectId, history);
             console.log(`Undo whiteboard action. Remaining: ${history.length}`);
         }
-        
+
         // Broadcast to ALL users
         io.to(socket.roomId).emit('whiteboard:undo', data);
     });
@@ -436,15 +451,15 @@ io.on('connection', (socket) => {
 
     // Study Room specific events
     socket.on('kick-user', async (data) => {
-        if(socket.roomType !== 'studyroom') return;
+        if (socket.roomType !== 'studyroom') return;
 
         try {
             const { userId: targetUserId } = data;
-            
+
             const studyRoom = await StudyRoom.findById(socket.studyRoom._id);
-            
+
             // Only owner can kick users
-            if(!studyRoom.isOwner(socket.user.userId)){
+            if (!studyRoom.isOwner(socket.user.userId)) {
                 socket.emit('error', { message: 'Only the room owner can remove participants' });
                 return;
             }
@@ -471,7 +486,7 @@ io.on('connection', (socket) => {
 
             // Disconnect the kicked user
             const kickedUserData = activeUsers.get(targetUserId);
-            if(kickedUserData){
+            if (kickedUserData) {
                 io.sockets.sockets.get(kickedUserData.socketId)?.disconnect();
             }
         } catch (error) {

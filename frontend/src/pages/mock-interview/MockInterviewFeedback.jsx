@@ -60,7 +60,7 @@ const MockInterviewFeedback = () => {
   // Render metric card
   const MetricCard = ({ title, metric }) => {
     if (!metric || metric.score === undefined) return null;
-    
+
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-3">
@@ -69,15 +69,15 @@ const MockInterviewFeedback = () => {
             {metric.score}/10
           </span>
         </div>
-        
+
         {/* Progress bar */}
         <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-          <div 
+          <div
             className={`h-2 rounded-full ${getScoreBarColor(metric.score)} transition-all`}
             style={{ width: `${metric.score * 10}%` }}
           ></div>
         </div>
-        
+
         <p className="text-sm text-gray-700 leading-relaxed">{metric.feedback}</p>
       </div>
     );
@@ -213,15 +213,23 @@ const MockInterviewFeedback = () => {
               </div>
             )}
 
-            {/* Action Button */}
+            {/* Action Buttons */}
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm text-center">
               <p className="text-gray-700 mb-4">Ready to improve your skills?</p>
-              <Link
-                to="/mock-interview/new"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors"
-              >
-                Start New Mock Interview
-              </Link>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link
+                  to="/mock-interview/new"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors w-full sm:w-auto justify-center"
+                >
+                  Start New Mock Interview
+                </Link>
+                <Link
+                  to="/dashboard"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white border border-gray-300 text-gray-700 font-semibold shadow-sm hover:bg-gray-50 transition-colors w-full sm:w-auto justify-center"
+                >
+                  <i className="ri-dashboard-line"></i> Back to Dashboard
+                </Link>
+              </div>
             </div>
           </div>
         )}
