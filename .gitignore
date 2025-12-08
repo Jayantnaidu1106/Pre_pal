@@ -39,3 +39,7 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# venv
+venv/
+venv2/

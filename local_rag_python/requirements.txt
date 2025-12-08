@@ -1,10 +1,8 @@
-langchain==0.1.12
-langchain-community==0.0.28
-langchain-core==0.1.32
-langchain-text-splitters==0.0.1
+langchain==0.0.350
 chromadb
 sentence-transformers
 pypdf
 gpt4all
 flask
+flask-cors
 numpy<2
