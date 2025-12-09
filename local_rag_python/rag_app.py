@@ -9,7 +9,7 @@ import torch # Explicit import for path detection
 try:
     torch_lib_path = os.path.join(os.path.dirname(torch.__file__), 'lib')
     if os.path.exists(torch_lib_path):
-        print(f"🔧 Adding Torch CUDA libs to PATH: {torch_lib_path}")
+        print(f"Adding Torch CUDA libs to PATH: {torch_lib_path}")
         os.environ['PATH'] = torch_lib_path + os.pathsep + os.environ['PATH']
         if hasattr(os, 'add_dll_directory'):
             os.add_dll_directory(torch_lib_path)
@@ -24,7 +24,7 @@ import uuid
 # Custom Embedding Function for ChromaDB
 class SentenceTransformerEmbeddingFunction:
     def __init__(self, model_name="all-MiniLM-L6-v2"):
-        print(f"🧠 Initializing Embeddings ({model_name})...")
+        print(f"Initializing Embeddings ({model_name})...")
         try:
             self.model = SentenceTransformer(model_name, device='cuda')
             print("   -> Using GPU (CUDA) for Embeddings")
@@ -35,14 +35,28 @@ class SentenceTransformerEmbeddingFunction:
     def __call__(self, input):
         if isinstance(input, str):
             input = [input]
+        print(f"   DEBUG: Embedding input batch size: {len(input)}")
         embeddings = self.model.encode(input)
+        print(f"   DEBUG: Embedding output shape: {len(embeddings)} (first dim)")
         return embeddings.tolist()
 
     def embed_documents(self, texts):
         return self.__call__(texts)
 
     def embed_query(self, input):
-        return self.__call__([input])[0]
+        # Fix for IndexError: Chroma sometimes passes a list containing the query
+        if isinstance(input, list):
+            if len(input) > 0:
+                input = input[0]
+            else:
+                return []
+                
+        # print(f"   DEBUG: embed_query input: {str(input)[:50]}")
+        result = self.__call__([input])
+        if not result:
+            print("   ERROR: Model returned empty embedding list!")
+            return [] 
+        return result[0]
     
     def name(self):
         return "sentence_transformers"
@@ -51,7 +65,7 @@ class ChatPDF:
     def __init__(self):
         self.embedding_fn = SentenceTransformerEmbeddingFunction()
         
-        print("🤖 Initializing Local LLM (GPT4All)...")
+        print("Initializing Local LLM (GPT4All)...")
         # device='gpu' will attempt to use the best available GPU (NVIDIA/AMD/Intel)
         # If it fails (missing DLLs leading to 0x7e), it usually warns and falls back or crashes.
         self.llm = GPT4All(
@@ -60,7 +74,7 @@ class ChatPDF:
             device='gpu' 
         )
         
-        print("💾 Connecting to Vector Store...")
+        print("Connecting to Vector Store...")
         self.chroma_client = chromadb.PersistentClient(path="db")
         self.collection = self.chroma_client.get_or_create_collection(
             name="pdf_docs",
@@ -84,17 +98,17 @@ class ChatPDF:
         return chunks
 
     def ingest(self, pdf_path):
-        print(f"📄 Loading {pdf_path}...")
+        print(f"Loading {pdf_path}...")
         reader = PdfReader(pdf_path)
         full_text = ""
         for page in reader.pages:
             full_text += page.extract_text() + "\n"
 
-        print(f"✂️  Splitting text...")
+        print(f"Splitting text...")
         chunks = self.recursive_split(full_text)
         print(f"   -> Created {len(chunks)} chunks.")
 
-        print("💾 Indexing Documents to Vector Store...")
+        print("Indexing Documents to Vector Store...")
         
         # Prepare data for Chroma
         ids = [str(uuid.uuid4()) for _ in chunks]
@@ -105,19 +119,34 @@ class ChatPDF:
             metadatas=metadatas,
             ids=ids
         )
-        print("✅ Ingestion Complete.")
+        print("Ingestion Complete.")
 
     def ask(self, query):
         if self.collection.count() == 0:
             return "Please ingest a document first.", []
         
-        print("🔍 Retrieving context...")
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=3
-        )
+        print(f"Retrieving context for query: {query[:50]}...")
+        print(f"   -> Collection Count: {self.collection.count()}")
+        
+        import traceback
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=3
+            )
+        except Exception as e:
+            print(f"CRITICAL ERROR in collection.query: {e}")
+            traceback.print_exc()
+            raise e
+        
+        print(f"DEBUG: Query Results Keys: {results.keys()}")
+        print(f"DEBUG: Results Documents: {results.get('documents')}")
         
         # Results are lists of lists (for batched queries)
+        if not results['documents'] or not results['documents'][0]:
+             print("No documents retrieved from vector store?")
+             return "I couldn't find any information in the document.", []
+
         retrieved_docs = results['documents'][0]
         # retrieved_metas = results['metadatas'][0] # Not used currently
         
@@ -133,7 +162,7 @@ Question: {query}
 
 Answer:"""
         
-        print("🤖 Generating Answer...")
+        print("Generating Answer...")
         
         # Generate with GPT4All
         # temp=0 for deterministic answers
@@ -153,7 +182,7 @@ Answer:"""
         return response.strip(), sources
     
     def clear(self):
-        print("🧹 Clearing Vector Store...")
+        print("Clearing Vector Store...")
         self.chroma_client.delete_collection("pdf_docs")
         self.collection = self.chroma_client.get_or_create_collection(
             name="pdf_docs",
@@ -163,7 +192,7 @@ Answer:"""
 def main():
     chat = ChatPDF()
     
-    print("🚀 Starting Local RAG System (No LangChain)...")
+    print("Starting Local RAG System (No LangChain)...")
     
     if len(sys.argv) > 1:
         pdf_path = sys.argv[1]

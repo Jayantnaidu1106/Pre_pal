@@ -14,11 +14,11 @@ def after_request(response):
     return response
 
 # Initialize RAG System
-print("⏳ Initializing ChatPDF Engine...")
+print("Initializing ChatPDF Engine...")
 # Note: ChatPDF initializes LLM on start. 
 # Ensure this script is run in an environment where rag_app.py works.
 rag_engine = ChatPDF() 
-print("✅ ChatPDF Engine Ready!")
+print("ChatPDF Engine Ready!")
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -143,8 +143,8 @@ def generate_quiz():
              raise Exception("RAG reports no document ingested")
 
     except Exception as rag_error:
-        print(f"⚠️ RAG Retrieval Failed: {rag_error}")
-        print("🔄 Attempting Direct Use Fallback (Reading PDF directly)...")
+        print(f"RAG Retrieval Failed: {rag_error}")
+        print("Attempting Direct Use Fallback (Reading PDF directly)...")
         
         try:
             # Fallback: Read first few pages of PDF directly
@@ -190,7 +190,7 @@ def generate_quiz():
             print("DEBUG: Fallback LLM Response received.")
             
         except Exception as fallback_error:
-            print(f"❌ Fallback Failed: {fallback_error}")
+            print(f"Fallback Failed: {fallback_error}")
             return jsonify({'error': f"Quiz generation failed: {str(rag_error)} | Fallback error: {str(fallback_error)}"}), 500
 
     if not answer_text:
