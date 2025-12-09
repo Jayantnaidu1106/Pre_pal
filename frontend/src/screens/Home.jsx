@@ -39,13 +39,22 @@ const Home = () => {
             <h1 className="text-2xl font-bold text-gray-900">Education Ecosystem</h1>
             <p className="text-sm text-gray-500">Welcome, {user?.name || user?.email || 'User'}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-          >
-            <i className="ri-logout-box-line"></i>
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <i className="ri-user-line"></i>
+              Profile
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >
+              <i className="ri-logout-box-line"></i>
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

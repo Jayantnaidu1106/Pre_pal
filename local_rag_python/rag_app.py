@@ -41,8 +41,8 @@ class SentenceTransformerEmbeddingFunction:
     def embed_documents(self, texts):
         return self.__call__(texts)
 
-    def embed_query(self, text):
-        return self.__call__([text])[0]
+    def embed_query(self, input):
+        return self.__call__([input])[0]
     
     def name(self):
         return "sentence_transformers"

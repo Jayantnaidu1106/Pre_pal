@@ -14,6 +14,9 @@ const Quiz = () => {
   const [score, setScore] = useState(0);
   const [error, setError] = useState('');
   const [numQuestions, setNumQuestions] = useState(5);
+  const [customSubject, setCustomSubject] = useState('');
+  const [subject, setSubject] = useState('');
+  const [title, setTitle] = useState('');
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -34,6 +37,9 @@ const Quiz = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('numQuestions', numQuestions.toString());
+    if (customSubject.trim()) {
+      formData.append('custom_subject', customSubject.trim());
+    }
 
     try {
       const response = await axios.post('/ai/generate-quiz', formData, {
@@ -41,14 +47,27 @@ const Quiz = () => {
         timeout: 60000
       });
 
-      if (Array.isArray(response.data)) {
-        setQuiz(response.data);
+      // Handle new response format { subject, questions } or legacy [questions]
+      let questions = [];
+      let detectedTopic = 'Generated Quiz';
+
+      if (response.data.questions && Array.isArray(response.data.questions)) {
+        questions = response.data.questions;
+        detectedTopic = response.data.subject || 'Generated Quiz';
+      } else if (Array.isArray(response.data)) {
+        // Fallback for old API or direct array return
+        questions = response.data;
+      }
+
+      if (questions.length > 0) {
+        setQuiz(questions);
+        setSubject(detectedTopic);
         setCurrentQuestionIndex(0);
         setSelectedAnswers({});
         setShowResults(false);
         setScore(0);
       } else {
-        throw new Error('Invalid quiz data received.');
+        throw new Error('Invalid quiz data received (no questions found).');
       }
     } catch (err) {
       console.error('Quiz generation error:', err);
@@ -73,7 +92,7 @@ const Quiz = () => {
     }
   };
 
-  const calculateScore = () => {
+  const calculateScore = async () => {
     let newScore = 0;
     quiz.forEach((q, index) => {
       if (selectedAnswers[index] === q.answer) {
@@ -82,6 +101,20 @@ const Quiz = () => {
     });
     setScore(newScore);
     setShowResults(true);
+
+    try {
+      await axios.post('/quiz/result', {
+        score: newScore,
+        totalQuestions: quiz.length,
+        quizData: quiz,
+        topic: subject || 'General',
+        title: title || (file ? file.name : 'Generated Quiz')
+      });
+      console.log('Quiz result saved successfully');
+    } catch (err) {
+      console.error('Failed to save quiz result', err);
+      // Don't block UI for this background save
+    }
   };
 
   const handleRetry = () => {
@@ -239,6 +272,17 @@ const Quiz = () => {
                   <i className="ri-error-warning-line"></i> {error}
                 </div>
               )}
+
+              <div className="mt-6">
+                <label className="block text-gray-700 font-semibold mb-2 text-left">Custom Topic / Title <span className="text-gray-400 font-normal text-sm">(Optional)</span></label>
+                <input
+                  type="text"
+                  placeholder="e.g. 'Linear Algebra Midterm' or 'History of Rome'"
+                  value={customSubject}
+                  onChange={(e) => setCustomSubject(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all"
+                />
+              </div>
 
               <div className="mt-6">
                 <label className="block text-gray-700 font-semibold mb-2 text-left">Number of Questions</label>

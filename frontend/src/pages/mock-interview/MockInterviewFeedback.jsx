@@ -83,6 +83,55 @@ const MockInterviewFeedback = () => {
     );
   };
 
+  // Custom SVG Pie Chart Component
+  const PieChart = ({ data }) => {
+    const total = data.reduce((acc, item) => acc + item.value, 0);
+    let currentAngle = 0;
+
+    return (
+      <div className="relative w-64 h-64 mx-auto">
+        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+          {data.map((item, index) => {
+            const angle = (item.value / total) * 360;
+            const x1 = 50 + 40 * Math.cos((Math.PI * currentAngle) / 180);
+            const y1 = 50 + 40 * Math.sin((Math.PI * currentAngle) / 180);
+            const x2 = 50 + 40 * Math.cos((Math.PI * (currentAngle + angle)) / 180);
+            const y2 = 50 + 40 * Math.sin((Math.PI * (currentAngle + angle)) / 180);
+
+            // Large arc flag
+            const largeArc = angle > 180 ? 1 : 0;
+
+            // Path command
+            const d = `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+            const pathInfo = (
+              <path
+                key={index}
+                d={d}
+                fill={item.color}
+                stroke="white"
+                strokeWidth="2"
+                className="hover:opacity-90 transition-opacity cursor-pointer group"
+              >
+                <title>{`${item.label}: ${item.value}/10`}</title>
+              </path>
+            );
+
+            currentAngle += angle;
+            return pathInfo;
+          })}
+          {/* Inner Circle for Donut Effect */}
+          <circle cx="50" cy="50" r="25" fill="white" />
+        </svg>
+        {/* Center Text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Skills</span>
+          <span className="text-gray-900 font-bold text-lg">Balance</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -128,17 +177,52 @@ const MockInterviewFeedback = () => {
               </div>
             </div>
 
-            {/* Detailed Metrics Grid */}
+
+
+            {/* Visual Analytics Section */}
             {feedback.metrics && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Performance Metrics</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <MetricCard title="Technical Knowledge" metric={feedback.metrics.technicalKnowledge} />
-                  <MetricCard title="Communication Skills" metric={feedback.metrics.communicationSkills} />
-                  <MetricCard title="Problem Solving" metric={feedback.metrics.problemSolvingApproach} />
-                  <MetricCard title="Confidence" metric={feedback.metrics.confidence} />
-                  <MetricCard title="Clarity of Answers" metric={feedback.metrics.clarityOfAnswers} />
-                  <MetricCard title="Depth of Knowledge" metric={feedback.metrics.depthOfKnowledge} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                {/* Pie Chart */}
+                <div className="md:col-span-1 bg-white border border-gray-200 rounded-lg p-6 shadow-sm flex flex-col items-center justify-center">
+                  <h3 className="text-lg font-bold text-gray-900 mb-6">Skill Distribution</h3>
+                  <PieChart
+                    data={[
+                      { label: 'Technical', value: feedback.metrics.technicalKnowledge?.score || 0, color: '#6366F1' }, // Indigo
+                      { label: 'Communication', value: feedback.metrics.communicationSkills?.score || 0, color: '#EC4899' }, // Pink
+                      { label: 'Problem Solving', value: feedback.metrics.problemSolvingApproach?.score || 0, color: '#F59E0B' }, // Amber
+                      { label: 'Confidence', value: feedback.metrics.confidence?.score || 0, color: '#10B981' }, // Emerald
+                      { label: 'Clarity', value: feedback.metrics.clarityOfAnswers?.score || 0, color: '#3B82F6' }, // Blue
+                      { label: 'Depth', value: feedback.metrics.depthOfKnowledge?.score || 0, color: '#8B5CF6' }  // Violet
+                    ].filter(d => d.value > 0)}
+                  />
+                  <div className="mt-6 flex flex-wrap justify-center gap-3">
+                    {[
+                      { label: 'Technical', color: 'bg-indigo-500' },
+                      { label: 'Communication', color: 'bg-pink-500' },
+                      { label: 'Problem Solving', color: 'bg-amber-500' },
+                      { label: 'Confidence', color: 'bg-emerald-500' },
+                      { label: 'Clarity', color: 'bg-blue-500' },
+                      { label: 'Depth', color: 'bg-violet-500' }
+                    ].map((legend, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <span className={`w-3 h-3 rounded-full ${legend.color}`}></span>
+                        {legend.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Metrics Grid (taking up remaining space) */}
+                <div className="md:col-span-2">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Detailed Metrics</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <MetricCard title="Technical Knowledge" metric={feedback.metrics.technicalKnowledge} />
+                    <MetricCard title="Communication Skills" metric={feedback.metrics.communicationSkills} />
+                    <MetricCard title="Problem Solving" metric={feedback.metrics.problemSolvingApproach} />
+                    <MetricCard title="Confidence" metric={feedback.metrics.confidence} />
+                    <MetricCard title="Clarity of Answers" metric={feedback.metrics.clarityOfAnswers} />
+                    <MetricCard title="Depth of Knowledge" metric={feedback.metrics.depthOfKnowledge} />
+                  </div>
                 </div>
               </div>
             )}
