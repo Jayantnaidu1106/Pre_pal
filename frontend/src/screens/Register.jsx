@@ -24,7 +24,7 @@ const Register = () => {
     setLoading(true);
     setError('');
 
-    // Validate passwords match
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -37,11 +37,11 @@ const Register = () => {
         password: formData.password
       });
 
-      // Store token and user data
+
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
 
-      // Redirect to home page
+
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Registration failed. Please try again.');
