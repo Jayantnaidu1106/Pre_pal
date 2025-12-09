@@ -102,7 +102,7 @@ const AnalyticsBoard = ({ quizHistory, interviewHistory = [] }) => {
     const points = chartData.map((d, i) => `${getX(i)},${getY(d.value)}`).join(' ');
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full">
             {/* Header / Controls */}
             <div className="flex flex-col gap-6 mb-8 border-b border-gray-100 pb-6">
 
@@ -183,12 +183,12 @@ const AnalyticsBoard = ({ quizHistory, interviewHistory = [] }) => {
 
             {/* CHART DISPLAY */}
             {!hasData ? (
-                <div className="h-64 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                <div className="h-96 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                     <i className="ri-bar-chart-groupped-line text-4xl mb-2 opacity-50"></i>
                     <p className="text-sm">No {viewMode} data available.</p>
                 </div>
             ) : (
-                <div className="relative h-64 w-full px-2">
+                <div className="relative h-96 w-full px-2">
                     <div className="absolute inset-x-4 inset-y-4">
                         {/* Grid */}
                         <div className="absolute inset-0 flex flex-col justify-between text-gray-200">
