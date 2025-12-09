@@ -43,21 +43,6 @@ class SentenceTransformerEmbeddingFunction:
     def embed_documents(self, texts):
         return self.__call__(texts)
 
-    def embed_query(self, input):
-        # Fix for IndexError: Chroma sometimes passes a list containing the query
-        if isinstance(input, list):
-            if len(input) > 0:
-                input = input[0]
-            else:
-                return []
-                
-        # print(f"   DEBUG: embed_query input: {str(input)[:50]}")
-        result = self.__call__([input])
-        if not result:
-            print("   ERROR: Model returned empty embedding list!")
-            return [] 
-        return result[0]
-    
     def name(self):
         return "sentence_transformers"
 
