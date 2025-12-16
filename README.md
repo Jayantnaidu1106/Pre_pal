@@ -1,4 +1,4 @@
-# 🎓 GRAMA INVEST - AI-Powered Collaborative Learning Platform
+# 🎓 PRE PAL - AI-Powered Collaborative Learning Platform
 
 A comprehensive real-time collaborative learning platform with AI-powered features including study rooms, mock interviews, quizzes, and interactive whiteboards.
 
