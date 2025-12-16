@@ -4,6 +4,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+package-lock.json
+yarn.lock
 
 # Environment variables
 .env
@@ -11,6 +13,7 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # Logs
 logs/
@@ -22,3 +25,37 @@ build/
 
 # Cache
 .cache/
+
+# Uploads (user-generated files)
+uploads/*
+!uploads/.gitkeep
+!uploads/projects/
+!uploads/studyrooms/
+uploads/projects/*
+uploads/studyrooms/*
+!uploads/projects/.gitkeep
+!uploads/studyrooms/.gitkeep
+
+# Testing
+coverage/
+.nyc_output/
+
+# Database
+*.sqlite
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PM2
+.pm2/
+pm2.log
