@@ -10,7 +10,7 @@ export const intializeSocket = (projectId) => {
     }
 
     // Checkpoint: Create new socket connection
-    socketInstance = socket('http://localhost:3000', {
+    socketInstance = socket('https://pre-pal.onrender.com', {
         auth: {
             token: localStorage.getItem('token'),
             projectId: projectId
