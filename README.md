@@ -337,7 +337,7 @@ For support, email your-email@example.com or open an issue in the repository.
 
 ## 🔗 Links
 
-- [Live Demo](https://your-demo-url.com)
+- [Live Demo](https://pre-pal-phi.vercel.app/)
 - [Documentation](https://github.com/Tanishk0109/Mini-Project/wiki)
 - [Issue Tracker](https://github.com/Tanishk0109/Mini-Project/issues)
 
